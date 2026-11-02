@@ -1,9 +1,12 @@
 import type { Store } from '../store'
 import type { Mode } from '../hooks/useSession'
 import { computeStats } from '../engine/stats'
+import { levelFor } from '../store'
 
-export function Home({ store, onPick, onNav, tab }: { store: Store; onPick: (m: Mode) => void; onNav: (t: 'home' | 'history' | 'stats') => void; tab: string }) {
+export function Home({ store, onPick, onNav, onTrain, tab }: { store: Store; onPick: (m: Mode) => void; onNav: (t: 'home' | 'history' | 'stats') => void; onTrain: () => void; tab: string }) {
   const st = computeStats(store.hands, 0, store.tournaments)
+  const lv = levelFor(store.xp)
+  const doneToday = store.streak.lastDay === new Date().toISOString().slice(0, 10)
   return (
     <div className="home">
       <div className="brand">
@@ -21,8 +24,15 @@ export function Home({ store, onPick, onNav, tab }: { store: Store; onPick: (m: 
           <div className="kpi"><div className="v">{st.hands}</div><div className="l">mains</div></div>
           <div className="kpi"><div className="v">{st.tournaments.played}</div><div className="l">tournois</div></div>
           <div className="kpi"><div className="v">{st.tournaments.wins}</div><div className="l">victoires</div></div>
+          <div className="kpi"><div className="v">Niv. {lv.level}</div><div className="l">{lv.title}</div></div>
         </div>
       </div>
+      <button className="mode train" onClick={onTrain}>
+        <span className="pill">{doneToday ? `🔥 ${store.streak.count} j · séance faite` : 'Séance du jour à faire'}</span>
+        <div className="icon">◆</div>
+        <h3>Entraînement</h3>
+        <p>Drills chronométrés, cours et parcours. Dix questions par jour suffisent pour progresser.</p>
+      </button>
       <div className="modes">
         <button className="mode focus" onClick={() => onPick('chipleader')}>
           <span className="pill">Ton leak</span>

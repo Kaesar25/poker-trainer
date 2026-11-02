@@ -12,6 +12,11 @@ export function StatsScreen({ store, onBack }: { store: Store; onBack: () => voi
     if (s.af < 1) tips.push('Agression postflop faible : tu suis plus que tu ne mises. Mise pour valeur quand tu es devant.')
     if (s.wtsd > 0.35) tips.push('Tu vas trop souvent à l\'abattage : tu paies des rivers que tu devrais lâcher.')
     if (s.wtsd > 0 && s.wsd < 0.45) tips.push('Tu perds la majorité de tes abattages : tes calls de river sont trop larges.')
+    if (s.cbetOpps >= 10 && s.cbet < 0.45) tips.push(`Tu ne c-bet que ${pct(s.cbet)} de tes flops en tant que relanceur : tu abandonnes l'initiative. Vise 55 à 70 %.`)
+    if (s.foldToCbetOpps >= 10 && s.foldToCbet > 0.65) tips.push(`Tu couches ${pct(s.foldToCbet)} des c-bets : les bots agressifs l'ont remarqué et bluffent plus. Défends avec tes tirages et tes paires.`)
+    if (s.model.samples >= 15 && s.model.foldToBet > 0.6) tips.push(`Face à une mise postflop, tu te couches ${pct(s.model.foldToBet)} du temps. Trop exploitable : les bots t'attaquent davantage.`)
+    if (s.model.samples >= 15 && s.model.callDown > 0.65) tips.push(`Face à une mise postflop, tu paies ${pct(s.model.callDown)} du temps. Les bots ont arrêté de bluffer contre toi et misent plus gros pour valeur : relance ou couche plus souvent.`)
+    if (s.bigLossVsCover.count >= 2) tips.push(`${s.bigLossVsCover.count} gros pots (> 20 BB) perdus contre des joueurs qui te couvraient, soit ${s.bigLossVsCover.chips} jetons. C'est exactement ton leak big stack vs big stack : contre eux, garde le pot petit.`)
   }
   const positions = Object.entries(s.byPosition).sort((a, b) => b[1].hands - a[1].hands)
   return (
@@ -27,6 +32,9 @@ export function StatsScreen({ store, onBack }: { store: Store; onBack: () => voi
         <div className="stat"><div className="v">{pct(s.wtsd)}</div><div className="l">WTSD</div><div className="d">Va à l'abattage après avoir vu le flop. Au-delà de 30 %, tu paies trop.</div></div>
         <div className="stat"><div className="v">{pct(s.wsd)}</div><div className="l">W$SD</div><div className="d">Gagne à l'abattage. En dessous de 50 %, tes calls sont trop larges.</div></div>
         <div className="stat"><div className="v" style={{ color: s.net >= 0 ? 'var(--green)' : 'var(--red)' }}>{s.net >= 0 ? '+' : ''}{s.net}</div><div className="l">Net jetons</div><div className="d">{s.bb100 >= 0 ? '+' : ''}{s.bb100.toFixed(1)} BB / 100 mains</div></div>
+        <div className="stat"><div className="v">{s.cbetOpps ? pct(s.cbet) : '—'}</div><div className="l">C-bet flop</div><div className="d">Mises au flop quand tu as relancé préflop. 55–70 % est sain.</div></div>
+        <div className="stat"><div className="v">{s.foldToCbetOpps ? pct(s.foldToCbet) : '—'}</div><div className="l">Fold au c-bet</div><div className="d">Au-delà de 60 %, tu te fais bluffer.</div></div>
+        <div className="stat"><div className="v" style={{ color: s.bigLossVsCover.count ? 'var(--red)' : 'var(--green)' }}>{s.bigLossVsCover.count}</div><div className="l">Gros pots perdus vs gros stacks</div><div className="d">Pots de plus de 20 BB perdus contre un joueur qui te couvrait, en tournoi.</div></div>
         <div className="stat"><div className="v">{s.tournaments.played}</div><div className="l">Tournois</div><div className="d">{s.tournaments.itm} dans les places payées · {s.tournaments.wins} victoire{s.tournaments.wins > 1 ? 's' : ''}</div></div>
       </div>
       {tips.length > 0 && (

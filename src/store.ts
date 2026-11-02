@@ -1,23 +1,33 @@
 import type { HandRecord } from './engine/stats'
+import type { DrillType } from './engine/drills'
 
 export interface TournamentResult { ts: number; mode: 'sng' | 'chipleader'; place: number | null; entrants: number; paid: boolean; prize: number; structure: string }
+
+export interface DrillProgress { asked: number; correct: number; recent: boolean[]; avgMs?: number }
 
 export interface Store {
   hands: HandRecord[]
   tournaments: TournamentResult[]
   settings: { coach: boolean; botSpeed: number; name: string }
   bankroll: number
+  drills: Partial<Record<DrillType, DrillProgress>>
+  lessonsRead: string[]
+  streak: { count: number; lastDay: string }
+  xp: number
 }
 
 const KEY = 'poker-trainer-v1'
-const DEFAULT: Store = { hands: [], tournaments: [], settings: { coach: true, botSpeed: 1, name: 'Toi' }, bankroll: 10000 }
+const DEFAULT: Store = {
+  hands: [], tournaments: [], settings: { coach: true, botSpeed: 1, name: 'Toi' }, bankroll: 10000,
+  drills: {}, lessonsRead: [], streak: { count: 0, lastDay: '' }, xp: 0,
+}
 
 export function loadStore(): Store {
   try {
     const raw = localStorage.getItem(KEY)
     if (!raw) return DEFAULT
     const s = JSON.parse(raw)
-    return { ...DEFAULT, ...s, settings: { ...DEFAULT.settings, ...(s.settings ?? {}) } }
+    return { ...DEFAULT, ...s, settings: { ...DEFAULT.settings, ...(s.settings ?? {}) }, drills: s.drills ?? {}, lessonsRead: s.lessonsRead ?? [], streak: s.streak ?? DEFAULT.streak, xp: s.xp ?? 0 }
   } catch {
     return DEFAULT
   }
@@ -28,4 +38,35 @@ export function saveStore(s: Store) {
     const trimmed = { ...s, hands: s.hands.slice(-500) }
     localStorage.setItem(KEY, JSON.stringify(trimmed))
   } catch { /* storage unavailable */ }
+}
+
+export const today = () => new Date().toISOString().slice(0, 10)
+
+export function recordAnswer(s: Store, type: DrillType, ok: boolean, ms?: number): Store {
+  const d = s.drills[type] ?? { asked: 0, correct: 0, recent: [] }
+  const recent = [...d.recent, ok].slice(-50)
+  const avgMs = ms !== undefined ? (d.avgMs ? d.avgMs * 0.8 + ms * 0.2 : ms) : d.avgMs
+  const day = today()
+  let streak = s.streak
+  if (streak.lastDay !== day) {
+    const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10)
+    streak = { count: streak.lastDay === yesterday ? streak.count + 1 : 1, lastDay: day }
+  }
+  return { ...s, drills: { ...s.drills, [type]: { asked: d.asked + 1, correct: d.correct + (ok ? 1 : 0), recent, avgMs } }, streak, xp: s.xp + (ok ? 10 : 2) }
+}
+
+export function accuracy(s: Store, types: DrillType[], minAnswers: number): { acc: number; n: number; ready: boolean } {
+  let ok = 0, n = 0
+  for (const t of types) { const d = s.drills[t]; if (d) { n += d.recent.length; ok += d.recent.filter(Boolean).length } }
+  return { acc: n ? ok / n : 0, n, ready: n >= minAnswers }
+}
+
+export function levelFor(xp: number): { level: number; title: string; next: number; progress: number } {
+  const thresholds = [0, 200, 500, 1000, 1800, 3000, 5000, 8000, 12000]
+  const titles = ['Fish', 'Débutant', 'Reg', 'Grinder', 'Shark', 'Pro', 'High roller', 'Légende', 'Champion de Malte']
+  let level = 0
+  while (level + 1 < thresholds.length && xp >= thresholds[level + 1]) level++
+  const next = thresholds[Math.min(level + 1, thresholds.length - 1)]
+  const prev = thresholds[level]
+  return { level: level + 1, title: titles[level], next, progress: next > prev ? (xp - prev) / (next - prev) : 1 }
 }

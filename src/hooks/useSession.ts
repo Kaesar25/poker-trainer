@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { applyAction, createGame, isHandOver, startHand, type Action, type BotProfile, type GameState } from '../engine/game'
 import { botDecide } from '../engine/bots'
 import { positionOf } from '../engine/coach'
-import { buildRecord, type HandRecord } from '../engine/stats'
+import { buildRecord, heroModel, type HandRecord } from '../engine/stats'
 import { blindsFor, chipLeaderStacks, createTournament, isTournamentOver, pause, prizeFor, registerEliminations, resume, type Tournament } from '../engine/tournament'
 import { loadStore, saveStore, type Store, type TournamentResult } from '../store'
 
@@ -18,7 +18,8 @@ export interface SessionConfig {
 }
 
 const BOT_NAMES = ['Léo', 'Marco', 'Sofia', 'Nina', 'Tom', 'Ava', 'Hugo', 'Emma']
-const PROFILES: BotProfile[] = ['tight', 'aggressive', 'loose', 'station', 'tight', 'aggressive', 'loose']
+const PROFILES: BotProfile[] = ['tight', 'aggressive', 'loose', 'station', 'bully', 'bluffer', 'tight']
+const CHIPLEADER_PROFILES: BotProfile[] = ['bully', 'aggressive', 'tight', 'station', 'bluffer', 'loose', 'tight']
 
 export interface Session {
   mode: Mode
@@ -35,6 +36,8 @@ export function useSession() {
   const beforeRef = useRef<GameState | null>(null)
   const timer = useRef<number | null>(null)
   const configRef = useRef<SessionConfig | null>(null)
+  const storeRef = useRef(store)
+  storeRef.current = store
 
   useEffect(() => saveStore(store), [store])
 
@@ -44,7 +47,7 @@ export function useSession() {
     configRef.current = cfg
     const mk = (i: number, stack: number) => (i === 0
       ? { id: 0, name: store.settings.name || 'Toi', stack, isBot: false }
-      : { id: i, name: BOT_NAMES[i - 1], stack, isBot: true, profile: PROFILES[(i - 1) % PROFILES.length] })
+      : { id: i, name: BOT_NAMES[i - 1], stack, isBot: true, profile: (cfg.mode === 'chipleader' ? CHIPLEADER_PROFILES : PROFILES)[(i - 1) % PROFILES.length] })
     let tournament: Tournament | null = null
     let players
     let blinds = { sb: 10, bb: 20, ante: 0 }
@@ -134,7 +137,8 @@ export function useSession() {
         if (!sess) return sess
         const st = sess.state
         if (isHandOver(st) || st.acting < 0 || !st.players[st.acting].isBot) return sess
-        const after = applyAction(st, botDecide(st))
+        const model = heroModel([...storeRef.current.hands, ...sess.records], HERO)
+        const after = applyAction(st, botDecide(st, Math.random, model))
         return isHandOver(after) ? finishHand(sess, after) : { ...sess, state: after }
       })
     }, (500 + Math.random() * 800) / speed)

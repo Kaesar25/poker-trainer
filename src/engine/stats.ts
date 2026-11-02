@@ -45,7 +45,38 @@ export function buildRecord(before: GameState, after: GameState, heroId: number,
   }
 }
 
+export interface HeroModel { foldToBet: number; callDown: number; samples: number }
+
+/** How the hero reacts when facing a postflop bet (used by adaptive bots and leak detection). */
+export function heroModel(records: HandRecord[], heroId: number): HeroModel {
+  let fold = 0, call = 0, raise = 0
+  for (const r of records.slice(-120)) {
+    const streets: Street[] = ['flop', 'turn', 'river']
+    for (const st of streets) {
+      const acts = r.actions.filter((a) => a.street === st)
+      for (let i = 1; i < acts.length; i++) {
+        const a = acts[i]
+        if (a.playerId !== heroId) continue
+        const prev = acts[i - 1]
+        if (prev.playerId !== heroId && (prev.action === 'bet' || prev.action === 'raise' || prev.action === 'allin')) {
+          if (a.action === 'fold') fold++
+          else if (a.action === 'call') call++
+          else raise++
+        }
+      }
+    }
+  }
+  const n = fold + call + raise
+  return { foldToBet: n ? fold / n : 0.5, callDown: n ? call / n : 0.4, samples: n }
+}
+
 export interface Stats {
+  cbet: number
+  cbetOpps: number
+  foldToCbet: number
+  foldToCbetOpps: number
+  bigLossVsCover: { count: number; chips: number }
+  model: HeroModel
   hands: number
   vpip: number
   pfr: number
@@ -62,11 +93,37 @@ const voluntary = (a: ActionRecord['action']) => a === 'call' || a === 'bet' || 
 
 export function computeStats(records: HandRecord[], heroId: number, tournaments: { place: number | null; paid: boolean; entrants: number }[] = []): Stats {
   let vpip = 0, pfr = 0, bets = 0, calls = 0, sawFlop = 0, wtsd = 0, wsd = 0, net = 0, bbSum = 0
+  let cbet = 0, cbetOpps = 0, foldToCbet = 0, foldToCbetOpps = 0
+  const bigLossVsCover = { count: 0, chips: 0 }
   const byPosition: Stats['byPosition'] = {}
   for (const r of records) {
     const mine = r.actions.filter((a) => a.playerId === heroId)
     const pre = mine.filter((a) => a.street === 'preflop')
     const post = mine.filter((a) => a.street !== 'preflop')
+    // c-bet: hero made the last preflop raise and is first aggressor on the flop
+    const preRaises = r.actions.filter((a) => a.street === 'preflop' && (a.action === 'raise' || a.action === 'allin'))
+    const heroPfr = preRaises.length > 0 && preRaises[preRaises.length - 1].playerId === heroId
+    const flop = r.actions.filter((a) => a.street === 'flop')
+    if (heroPfr && flop.length > 0) {
+      const firstAgg = flop.find((a) => a.action === 'bet' || a.action === 'raise' || a.action === 'allin')
+      const heroActedFlop = flop.some((a) => a.playerId === heroId)
+      if (heroActedFlop && (!firstAgg || firstAgg.playerId === heroId || flop.findIndex((a) => a.playerId === heroId) < flop.indexOf(firstAgg))) {
+        cbetOpps++
+        if (firstAgg && firstAgg.playerId === heroId) cbet++
+      }
+    }
+    if (!heroPfr && preRaises.length > 0 && flop.length > 0 && !pre.some((a) => a.action === 'fold')) {
+      const firstAgg = flop.find((a) => a.action === 'bet' || a.action === 'raise' || a.action === 'allin')
+      if (firstAgg && firstAgg.playerId === preRaises[preRaises.length - 1].playerId) {
+        const after = flop.slice(flop.indexOf(firstAgg) + 1).find((a) => a.playerId === heroId)
+        if (after) { foldToCbetOpps++; if (after.action === 'fold') foldToCbet++ }
+      }
+    }
+    if (r.mode !== 'cash' && r.heroDelta < -20 * r.blinds.bb) {
+      const me = r.players.find((p) => p.id === heroId)
+      const winnerCovers = r.winners.some((w) => { const pl = r.players.find((p) => p.name === w.name); return pl && me && pl.stackBefore >= me.stackBefore })
+      if (winnerCovers) { bigLossVsCover.count++; bigLossVsCover.chips += -r.heroDelta }
+    }
     if (pre.some((a) => voluntary(a.action))) vpip++
     if (pre.some((a) => a.action === 'raise' || a.action === 'bet' || (a.action === 'allin' && a.amount > r.blinds.bb))) pfr++
     for (const a of post) {
@@ -85,6 +142,12 @@ export function computeStats(records: HandRecord[], heroId: number, tournaments:
   const streets: Street[] = ['flop']
   void streets
   return {
+    cbet: cbetOpps ? cbet / cbetOpps : 0,
+    cbetOpps,
+    foldToCbet: foldToCbetOpps ? foldToCbet / foldToCbetOpps : 0,
+    foldToCbetOpps,
+    bigLossVsCover,
+    model: heroModel(records, heroId),
     hands: records.length,
     vpip: vpip / n,
     pfr: pfr / n,

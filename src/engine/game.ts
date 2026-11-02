@@ -2,7 +2,7 @@ import { newDeck, shuffle, type Card, cardToString } from './cards'
 import { evaluate, describe, type HandValue } from './evaluator'
 
 export type Street = 'idle' | 'preflop' | 'flop' | 'turn' | 'river' | 'showdown'
-export type BotProfile = 'tight' | 'loose' | 'aggressive' | 'station'
+export type BotProfile = 'tight' | 'loose' | 'aggressive' | 'station' | 'bully' | 'bluffer'
 
 export interface Player {
   id: number

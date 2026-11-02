@@ -9,6 +9,8 @@ it('bots play 200 hands without error and conserve chips', () => {
     { id: 1, name: 'B', stack: 2000, isBot: true, profile: 'loose' },
     { id: 2, name: 'C', stack: 2000, isBot: true, profile: 'aggressive' },
     { id: 3, name: 'D', stack: 2000, isBot: true, profile: 'station' },
+    { id: 4, name: 'E', stack: 2000, isBot: true, profile: 'bully' },
+    { id: 5, name: 'F', stack: 2000, isBot: true, profile: 'bluffer' },
   ], { sb: 10, bb: 20, ante: 0 })
   for (let h = 0; h < 200; h++) {
     s = startHand(s, rng)
@@ -16,7 +18,7 @@ it('bots play 200 hands without error and conserve chips', () => {
     let g = 0
     while (!isHandOver(s) && g++ < 200) s = applyAction(s, botDecide(s, rng))
     expect(isHandOver(s)).toBe(true)
-    expect(s.players.reduce((a, p) => a + p.stack, 0)).toBe(8000)
+    expect(s.players.reduce((a, p) => a + p.stack, 0)).toBe(12000)
   }
   console.log(s.players.map(p => p.name + ':' + p.stack).join(' '), 'hands', s.handNumber)
 })

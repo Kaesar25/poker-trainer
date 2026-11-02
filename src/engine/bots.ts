@@ -57,11 +57,38 @@ const STYLES: Record<BotProfile, Style> = {
   loose: { vpip: 0.2, aggression: 0.35, bluff: 0.08, callDown: 0.1 },
   aggressive: { vpip: 0.3, aggression: 0.8, bluff: 0.2, callDown: 0 },
   station: { vpip: 0.2, aggression: 0.15, bluff: 0.02, callDown: 0.25 },
+  bully: { vpip: 0.35, aggression: 0.7, bluff: 0.12, callDown: -0.02 },
+  bluffer: { vpip: 0.28, aggression: 0.6, bluff: 0.35, callDown: 0.05 },
 }
 
-export function botDecide(s: GameState, rng: () => number = Math.random): Action {
+export const PROFILE_LABEL: Record<BotProfile, string> = {
+  tight: 'Serré', loose: 'Large', aggressive: 'Agressif', station: 'Calling station', bully: 'Bully', bluffer: 'Bluffeur',
+}
+
+/** What the bots have learned about the hero. */
+export interface HeroModel {
+  foldToBet: number // 0..1, share of times hero folded when facing a bet postflop
+  callDown: number // 0..1, share of times hero called when facing a bet postflop
+  samples: number
+}
+
+export function botDecide(s: GameState, rng: () => number = Math.random, hero?: HeroModel): Action {
   const p = s.players[s.acting]
-  const style = STYLES[p.profile ?? 'tight']
+  const base = STYLES[p.profile ?? 'tight']
+  const style: Style = { ...base }
+  // Adaptation: exploit the hero when the pot is heads-up against them
+  const heroPlayer = s.players.find((q) => !q.isBot)
+  const vsHero = !!heroPlayer && !heroPlayer.folded && !heroPlayer.out && s.players.filter((q) => !q.out && !q.folded).length === 2
+  if (hero && hero.samples >= 12 && vsHero) {
+    if (hero.foldToBet > 0.6) { style.bluff = Math.min(0.5, style.bluff + 0.2); style.aggression = Math.min(0.95, style.aggression + 0.15) }
+    if (hero.callDown > 0.65) { style.bluff = Math.max(0, style.bluff - 0.08); style.aggression = Math.min(0.95, style.aggression + 0.2) }
+  }
+  // Bully: when the bot covers the opponents by a wide margin, open and 3-bet much wider against mid stacks
+  if (p.profile === 'bully') {
+    const others = s.players.filter((q) => !q.out && q.id !== p.id)
+    const midStacks = others.filter((q) => q.stack >= 8 * s.blinds.bb && q.stack <= 28 * s.blinds.bb && q.stack < p.stack * 0.5)
+    if (midStacks.length >= 1 && s.street === 'preflop') { style.vpip -= 0.15; style.aggression = 0.9 }
+  }
   const la = legalActions(s)
   const pot = totalPot(s)
   const opponents = s.players.filter((q) => !q.out && !q.folded && q.id !== p.id).length
