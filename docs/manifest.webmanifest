@@ -1,0 +1,1 @@
+{"name":"Poker Trainer","short_name":"Poker","description":"Entraîneur de poker personnel — tournois, cash game, drills","start_url":"./","display":"standalone","background_color":"#0b1a14","theme_color":"#0f3d2e","lang":"en","scope":"./","orientation":"any","icons":[{"src":"icon.svg","sizes":"any","type":"image/svg+xml","purpose":"any maskable"}]}
