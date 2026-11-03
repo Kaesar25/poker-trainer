@@ -1,11 +1,12 @@
 import { DRILL_META, type DrillType } from '../engine/drills'
-import { accuracy, levelFor, type Store } from '../store'
+import { accuracy, endurance, levelFor, type Store } from '../store'
 import { LEVELS } from '../content/lessons'
 
 const TYPES: DrillType[] = ['preflop', 'odds', 'outs', 'board', 'pushfold', 'icm']
 
-export function Training({ store, onDaily, onDrill, onLearn, onBack }: { store: Store; onDaily: () => void; onDrill: (t: DrillType) => void; onLearn: () => void; onBack: () => void }) {
+export function Training({ store, onDaily, onDrill, onLearn, onBack, onMarathon }: { store: Store; onDaily: () => void; onDrill: (t: DrillType) => void; onLearn: () => void; onBack: () => void; onMarathon: () => void }) {
   const lv = levelFor(store.xp)
+  const en = endurance(store)
   const doneToday = store.streak.lastDay === new Date().toISOString().slice(0, 10)
   const unlocked = LEVELS.filter((_L, i) => i === 0 || accuracy(store, LEVELS[i - 1].gate.drills, LEVELS[i - 1].gate.minAnswers).ready && accuracy(store, LEVELS[i - 1].gate.drills, LEVELS[i - 1].gate.minAnswers).acc >= LEVELS[i - 1].gate.accuracy).length
   return (
@@ -43,6 +44,15 @@ export function Training({ store, onDaily, onDrill, onLearn, onBack }: { store: 
           )
         })}
       </div>
+      <button className="daily marathon" onClick={onMarathon}>
+        <div className="daily-l">
+          <div className="pill">Endurance</div>
+          <h3>Marathon · objectif {en.target} min cette semaine</h3>
+          <p>Plus longue session : {en.longest} min. Cette semaine : {en.sessionsThisWeek} session{en.sessionsThisWeek > 1 ? 's' : ''}, {en.weekMinutes} min. Un vrai tournoi de 60 joueurs, pause guidée chaque heure, alerte quand tu décroches.</p>
+          <div className="bar" style={{ marginTop: 6 }}><div style={{ width: `${Math.min(100, (en.longest / en.target) * 100)}%` }} /></div>
+        </div>
+        <div className="daily-r">▶</div>
+      </button>
       <button className="daily learn" onClick={onLearn}>
         <div className="daily-l">
           <div className="pill">Cours</div>

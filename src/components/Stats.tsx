@@ -43,6 +43,8 @@ export function StatsScreen({ store, onBack }: { store: Store; onBack: () => voi
           {tips.map((t, i) => <div key={i} className="d" style={{ fontSize: 13, marginBottom: 6 }}>◆ {t}</div>)}
         </div>
       )}
+      <Lucidity store={store} />
+      <ByCheckin store={store} />
       {positions.length > 0 && (
         <div className="stat">
           <div className="l" style={{ marginBottom: 8 }}>Par position</div>
@@ -54,6 +56,61 @@ export function StatsScreen({ store, onBack }: { store: Store; onBack: () => voi
           ))}
         </div>
       )}
+    </div>
+  )
+}
+
+
+function Lucidity({ store }: { store: Store }) {
+  const buckets: Record<number, { n: number; errors: number; ms: number }> = {}
+  for (const sess of store.sessions) for (const b of sess.lucidity) {
+    const x = (buckets[b.bucket] ??= { n: 0, errors: 0, ms: 0 })
+    x.n += b.n; x.errors += b.errors; x.ms += b.avgMs * b.n
+  }
+  const rows = Object.entries(buckets).map(([b, x]) => ({ b: Number(b), n: x.n, err: x.errors / x.n, ms: x.ms / x.n })).filter((r) => r.n >= 5).sort((a, b) => a.b - b.b)
+  if (rows.length < 2) return (
+    <div className="stat"><div className="l" style={{ marginBottom: 6 }}>Courbe de lucidité</div><div className="d">Joue des sessions de plus d'une heure (mode Marathon) : l'app mesurera, par tranche de 30 minutes, ton taux d'écarts avec le coach et ton temps de décision, pour te montrer à quel moment tu décroches.</div></div>
+  )
+  const maxErr = Math.max(...rows.map((r) => r.err), 0.3)
+  const worst = rows.reduce((a, r) => (r.err > a.err ? r : a), rows[0])
+  const best = rows.reduce((a, r) => (r.err < a.err ? r : a), rows[0])
+  return (
+    <div className="stat">
+      <div className="l" style={{ marginBottom: 8 }}>Courbe de lucidité · écarts avec le coach par tranche de 30 min</div>
+      <div className="luc">
+        {rows.map((r) => (
+          <div key={r.b} className="luc-col" title={`${r.n} décisions · ${(r.ms / 1000).toFixed(1)} s en moyenne`}>
+            <div className="luc-v">{Math.round(r.err * 100)} %</div>
+            <div className="luc-bar"><div style={{ height: `${(r.err / maxErr) * 100}%`, background: r.err >= worst.err - 0.001 && rows.length > 1 ? 'var(--red)' : r.err <= best.err + 0.001 ? 'var(--green)' : 'var(--gold)' }} /></div>
+            <div className="luc-l">{r.b * 30}–{r.b * 30 + 30}'</div>
+            <div className="luc-ms">{(r.ms / 1000).toFixed(1)} s</div>
+          </div>
+        ))}
+      </div>
+      <div className="d" style={{ marginTop: 8 }}>{worst.b !== best.b ? `Tu es le plus lucide entre ${best.b * 30} et ${best.b * 30 + 30} min, et tu décroches entre ${worst.b * 30} et ${worst.b * 30 + 30} min (${Math.round(worst.err * 100)} % d'écarts contre ${Math.round(best.err * 100)} %). Planifie ta pause juste avant.` : 'Pas encore de différence nette entre les tranches.'}</div>
+    </div>
+  )
+}
+
+function ByCheckin({ store }: { store: Store }) {
+  const sess = store.sessions.filter((x) => x.checkin && x.decisions >= 10)
+  if (sess.length < 3) return null
+  const dims: [keyof NonNullable<typeof sess[0]['checkin']>, string][] = [['energy', 'Énergie'], ['mood', 'Humeur'], ['focus', 'Concentration']]
+  return (
+    <div className="stat">
+      <div className="l" style={{ marginBottom: 8 }}>Ton état avant de jouer, et ce que ça donne</div>
+      {dims.map(([k, label]) => {
+        const lo = sess.filter((x) => x.checkin![k] <= 2), hi = sess.filter((x) => x.checkin![k] >= 4)
+        const err = (xs: typeof sess) => (xs.length ? Math.round((xs.reduce((a, x) => a + x.errors, 0) / xs.reduce((a, x) => a + x.decisions, 0)) * 100) : null)
+        const net = (xs: typeof sess) => (xs.length ? Math.round(xs.reduce((a, x) => a + x.net, 0) / xs.length) : null)
+        return (
+          <div key={k} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, padding: '5px 0', borderBottom: '1px solid rgba(255,255,255,0.05)', gap: 8 }}>
+            <span>{label}</span>
+            <span style={{ color: 'var(--muted)' }}>faible : {lo.length ? `${err(lo)} % d'écarts, ${net(lo)} jetons` : '—'}</span>
+            <span style={{ color: 'var(--muted)' }}>élevée : {hi.length ? `${err(hi)} % d'écarts, ${net(hi)} jetons` : '—'}</span>
+          </div>
+        )
+      })}
     </div>
   )
 }

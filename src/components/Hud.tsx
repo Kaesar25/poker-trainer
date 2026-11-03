@@ -7,8 +7,8 @@ function fmt(ms: number) {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
 }
 
-export function Hud({ state: s, tournament: t, mode, heroIdx, showLog, onToggleLog, coach, onToggleCoach, onQuit }: {
-  state: GameState; tournament: Tournament | null; mode: string; heroIdx: number; showLog: boolean; onToggleLog: () => void; coach: boolean; onToggleCoach: () => void; onQuit: () => void
+export function Hud({ state: s, tournament: t, mode, heroIdx, showLog, onToggleLog, coach, onToggleCoach, onQuit, playedMs, onPause }: {
+  state: GameState; tournament: Tournament | null; mode: string; heroIdx: number; showLog: boolean; onToggleLog: () => void; coach: boolean; onToggleCoach: () => void; onQuit: () => void; playedMs: number; onPause: () => void
 }) {
   const [, tick] = useState(0)
   useEffect(() => {
@@ -30,7 +30,7 @@ export function Hud({ state: s, tournament: t, mode, heroIdx, showLog, onToggleL
       <>
         <div className="m"><div className="l">Niveau {li + 1}</div><div className="v gold">{lvl.sb}/{lvl.bb}{lvl.ante ? ` · a${lvl.ante}` : ''}</div></div>
         <div className="m next"><div className="l">Suivant</div><div className="v">{next.sb}/{next.bb} dans {fmt(left)}</div></div>
-        <div className="m"><div className="l">Restants</div><div className="v">{alive.length}/{t.entrants} · {rank}{rank === 1 ? 'er' : 'e'}</div></div>
+        <div className="m"><div className="l">Restants</div><div className="v">{t.mode === 'marathon' ? t.field : alive.length}/{t.entrants} · {rank}{rank === 1 ? 'er' : 'e'}{t.mode === 'marathon' ? ' à table' : ''}</div></div>
       </>
     )
   }
@@ -39,7 +39,7 @@ export function Hud({ state: s, tournament: t, mode, heroIdx, showLog, onToggleL
   return (
     <>
       <div className="hud">
-        <div className="title">{mode === 'cash' ? 'Cash game' : mode === 'sng' ? 'Sit & Go' : 'Chip leader'}</div>
+        <div className="title">{mode === 'cash' ? 'Cash game' : mode === 'sng' ? 'Sit & Go' : mode === 'marathon' ? 'Marathon' : 'Chip leader'}</div>
         <div className="meta">
           {levelInfo ?? (
             <>
@@ -48,9 +48,11 @@ export function Hud({ state: s, tournament: t, mode, heroIdx, showLog, onToggleL
             </>
           )}
           <div className="m"><div className="l">Ton tapis</div><div className="v">{hero.stack} · {Math.round(hero.stack / s.blinds.bb)} BB</div></div>
+          <div className="m next"><div className="l">Temps de jeu</div><div className="v">{fmt(playedMs)}</div></div>
         </div>
         <div className="actions">
           <button className={'ghost' + (coach ? ' on' : '')} onClick={onToggleCoach}>◆ Coach</button>
+          {mode !== 'cash' && <button className="ghost" onClick={onPause} title="Pause">❚❚</button>}
           <button className={'ghost' + (showLog ? ' on' : '')} onClick={onToggleLog}>☰</button>
           <button className="ghost" onClick={onQuit}>✕</button>
         </div>

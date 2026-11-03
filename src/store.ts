@@ -1,7 +1,14 @@
 import type { HandRecord } from './engine/stats'
 import type { DrillType } from './engine/drills'
 
-export interface TournamentResult { ts: number; mode: 'sng' | 'chipleader'; place: number | null; entrants: number; paid: boolean; prize: number; structure: string }
+export interface CheckIn { energy: number; mood: number; focus: number }
+export interface Decision { t: number; ms: number; mistake: boolean; hand: number }
+export interface SessionSummary {
+  ts: number; mode: string; minutes: number; hands: number; net: number; place: number | null; entrants: number | null
+  checkin: CheckIn | null; lucidity: { bucket: number; n: number; errors: number; avgMs: number }[]; decisions: number; errors: number
+}
+export interface JournalEntry { ts: number; mode: string; minutes: number; place: number | null; net: number; good: string; mistake: string; mental: string; checkin: CheckIn | null }
+export interface TournamentResult { ts: number; mode: 'sng' | 'chipleader' | 'marathon'; place: number | null; entrants: number; paid: boolean; prize: number; structure: string; checkin?: CheckIn; minutes?: number }
 
 export interface DrillProgress { asked: number; correct: number; recent: boolean[]; avgMs?: number }
 
@@ -14,12 +21,14 @@ export interface Store {
   lessonsRead: string[]
   streak: { count: number; lastDay: string }
   xp: number
+  sessions: SessionSummary[]
+  journal: JournalEntry[]
 }
 
 const KEY = 'poker-trainer-v1'
 const DEFAULT: Store = {
   hands: [], tournaments: [], settings: { coach: true, botSpeed: 1, name: 'Toi' }, bankroll: 10000,
-  drills: {}, lessonsRead: [], streak: { count: 0, lastDay: '' }, xp: 0,
+  drills: {}, lessonsRead: [], streak: { count: 0, lastDay: '' }, xp: 0, sessions: [], journal: [],
 }
 
 export function loadStore(): Store {
@@ -27,7 +36,7 @@ export function loadStore(): Store {
     const raw = localStorage.getItem(KEY)
     if (!raw) return DEFAULT
     const s = JSON.parse(raw)
-    return { ...DEFAULT, ...s, settings: { ...DEFAULT.settings, ...(s.settings ?? {}) }, drills: s.drills ?? {}, lessonsRead: s.lessonsRead ?? [], streak: s.streak ?? DEFAULT.streak, xp: s.xp ?? 0 }
+    return { ...DEFAULT, ...s, settings: { ...DEFAULT.settings, ...(s.settings ?? {}) }, drills: s.drills ?? {}, lessonsRead: s.lessonsRead ?? [], streak: s.streak ?? DEFAULT.streak, xp: s.xp ?? 0, sessions: s.sessions ?? [], journal: s.journal ?? [] }
   } catch {
     return DEFAULT
   }
@@ -69,4 +78,14 @@ export function levelFor(xp: number): { level: number; title: string; next: numb
   const next = thresholds[Math.min(level + 1, thresholds.length - 1)]
   const prev = thresholds[level]
   return { level: level + 1, title: titles[level], next, progress: next > prev ? (xp - prev) / (next - prev) : 1 }
+}
+
+/** Endurance: longest session so far and this week's target. */
+export function endurance(s: Store): { longest: number; weekMinutes: number; target: number; sessionsThisWeek: number } {
+  const longest = s.sessions.reduce((a, x) => Math.max(a, x.minutes), 0)
+  const weekAgo = Date.now() - 7 * 86400000
+  const week = s.sessions.filter((x) => x.ts >= weekAgo)
+  const weekMinutes = week.reduce((a, x) => a + x.minutes, 0)
+  const target = longest < 30 ? 30 : Math.min(300, Math.ceil((longest * 1.25) / 15) * 15)
+  return { longest, weekMinutes, target, sessionsThisWeek: week.length }
 }

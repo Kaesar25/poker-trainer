@@ -26,7 +26,7 @@ export const STRUCTURES: Record<string, Structure> = {
   },
 }
 
-export type TournamentMode = 'sng' | 'chipleader'
+export type TournamentMode = 'sng' | 'chipleader' | 'marathon'
 
 export interface Tournament {
   mode: TournamentMode
@@ -40,13 +40,17 @@ export interface Tournament {
   runningSince: number | null // Date.now() when last resumed
   finished: { playerId: number; place: number }[]
   heroPlace: number | null
+  /** Marathon: players still alive in the whole field (table + other tables). */
+  field: number
+  tableSize: number
+  startStack: number
 }
 
-export function createTournament(mode: TournamentMode, structureId: string, tablePlayers: number, opts: { buyIn?: number; startLevel?: number; entrants?: number } = {}): Tournament {
+export function createTournament(mode: TournamentMode, structureId: string, tablePlayers: number, opts: { buyIn?: number; startLevel?: number; entrants?: number; startStack?: number } = {}): Tournament {
   const entrants = opts.entrants ?? tablePlayers
   const buyIn = opts.buyIn ?? 100
   const prizePool = buyIn * entrants
-  const pct = entrants <= 3 ? [0.65, 0.35] : entrants <= 6 ? [0.5, 0.3, 0.2] : entrants <= 12 ? [0.45, 0.27, 0.18, 0.1] : [0.4, 0.25, 0.15, 0.1, 0.06, 0.04]
+  const pct = entrants <= 3 ? [0.65, 0.35] : entrants <= 6 ? [0.5, 0.3, 0.2] : entrants <= 12 ? [0.45, 0.27, 0.18, 0.1] : entrants <= 30 ? [0.4, 0.25, 0.15, 0.1, 0.06, 0.04] : [0.27, 0.18, 0.13, 0.1, 0.08, 0.07, 0.06, 0.055, 0.055]
   const payouts = pct.map((p) => Math.round(prizePool * p))
   return {
     mode, structureId, entrants, buyIn, prizePool, payouts,
@@ -55,6 +59,9 @@ export function createTournament(mode: TournamentMode, structureId: string, tabl
     runningSince: null,
     finished: [],
     heroPlace: null,
+    field: entrants,
+    tableSize: tablePlayers,
+    startStack: opts.startStack ?? 0,
   }
 }
 
@@ -127,4 +134,44 @@ export function chipLeaderStacks(bb: number, n: number): { hero: number; others:
   const mid = [24 * bb, 18 * bb, 12 * bb, 30 * bb]
   const others = [...big, ...mid].slice(0, n - 1)
   return { hero, others }
+}
+
+/** Marathon: how many players the whole field should have at this level (shrinks over time). */
+export function targetField(t: Tournament, levelIndex: number, tableAlive: number): number {
+  const st = structureOf(t)
+  const progress = Math.min(1, levelIndex / (st.levels.length - 2))
+  const target = Math.round(t.entrants * Math.pow(1 - progress, 1.35))
+  return Math.max(tableAlive, Math.min(t.field, target))
+}
+
+/** Marathon: register table busts with their place in the whole field. */
+export function registerMarathonBusts(t: Tournament, s: GameState, heroId: number): Tournament {
+  const already = new Set(t.finished.map((f) => f.playerId))
+  const newlyOut = s.players.filter((p) => p.out && !already.has(p.id))
+  if (newlyOut.length === 0) return t
+  const finished = t.finished.slice()
+  let field = t.field
+  let heroPlace = t.heroPlace
+  for (const p of newlyOut) {
+    finished.push({ playerId: p.id, place: field })
+    if (p.id === heroId) heroPlace = field
+    field--
+  }
+  const alive = s.players.filter((p) => !p.out)
+  if (field <= 1 && alive.length === 1) {
+    finished.push({ playerId: alive[0].id, place: 1 })
+    if (alive[0].id === heroId) heroPlace = 1
+    field = 1
+  }
+  return { ...t, finished, field, heroPlace }
+}
+
+/** Marathon: average stack of players outside this table. */
+export function outsideAverageStack(t: Tournament, s: GameState): number {
+  const total = t.entrants * t.startStack
+  const alive = s.players.filter((p) => !p.out)
+  const tableChips = alive.reduce((a, p) => a + p.stack, 0)
+  const outside = t.field - alive.length
+  if (outside <= 0) return t.startStack
+  return Math.max(10 * s.blinds.bb, Math.round((total - tableChips) / outside))
 }

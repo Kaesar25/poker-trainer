@@ -375,3 +375,33 @@ h1, h2, h3 { font-family: var(--font-display); font-weight: 700; margin: 0; }
 .lesson .section h3 { font-size: 16px; margin-bottom: 6px; }
 .lesson .section p { margin: 0 0 8px; line-height: 1.6; font-size: 14.5px; color: #e3ece7; }
 .lesson .section p:last-child { margin-bottom: 0; }
+
+/* ---------- Mental / endurance ---------- */
+.checkin { background: var(--glass); border: 1px solid var(--glass-border); border-radius: 16px; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
+.ci-row { display: flex; flex-direction: column; gap: 4px; }
+.ci-label { font-size: 14px; font-weight: 600; display: flex; justify-content: space-between; }
+.ci-label b { color: var(--gold); }
+.ci-row input[type=range] { accent-color: var(--gold-2); width: 100%; }
+.ci-hint { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); }
+.modal.pause, .modal.journal { max-width: 480px; text-align: left; }
+.modal.pause h2, .modal.journal h2 { text-align: center; }
+.modal.pause .place { text-align: center; }
+.ta { width: 100%; min-height: 64px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.12); background: rgba(0,0,0,0.3); color: var(--text); padding: 10px; font: inherit; font-size: 14px; resize: vertical; user-select: text; }
+.ta:focus { outline: 2px solid rgba(233,212,138,0.5); }
+.jl { display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: var(--muted); font-weight: 600; }
+.alert { margin: 0 12px; padding: 10px 14px; border-radius: 14px; display: flex; flex-direction: column; gap: 6px; animation: coachin 0.3s ease both; }
+.alert.fatigue, .alert.autopilot { background: linear-gradient(90deg, rgba(90,60,10,0.9), rgba(30,20,6,0.95)); border: 1px solid rgba(233,212,138,0.5); }
+.alert.tilt { background: linear-gradient(90deg, rgba(110,30,30,0.9), rgba(40,10,10,0.95)); border: 1px solid rgba(224,79,79,0.6); }
+.alert-t { font-family: var(--font-display); font-size: 16px; color: var(--gold); }
+.alert.tilt .alert-t { color: #ff9a9a; }
+.alert-x { font-size: 12.5px; line-height: 1.45; color: #e8ede9; }
+.alert .row { justify-content: flex-end; }
+.alert .row .ghost { flex: 0 0 auto; }
+.daily.marathon { background: linear-gradient(160deg, rgba(20, 40, 80, 0.85), rgba(8, 14, 30, 0.95)); border-color: rgba(79,143,224,0.4); }
+.luc { display: flex; gap: 6px; align-items: flex-end; height: 150px; }
+.luc-col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px; height: 100%; }
+.luc-v { font-size: 11px; font-weight: 700; }
+.luc-bar { flex: 1; width: 100%; display: flex; align-items: flex-end; background: rgba(255,255,255,0.05); border-radius: 6px; overflow: hidden; }
+.luc-bar > div { width: 100%; border-radius: 6px 6px 0 0; transition: height 0.4s; }
+.luc-l { font-size: 10px; color: var(--muted); white-space: nowrap; }
+.luc-ms { font-size: 10px; color: var(--gold); }

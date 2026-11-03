@@ -45,6 +45,12 @@ export function Home({ store, onPick, onNav, onTrain, tab }: { store: Store; onP
           <h3>Sit & Go</h3>
           <p>Tournoi complet avec structure de blinds, antes, timer et places payées.</p>
         </button>
+        <button className="mode" onClick={() => onPick('marathon')}>
+          <span className="pill">Endurance</span>
+          <div className="icon">⏱</div>
+          <h3>Marathon</h3>
+          <p>Tournoi de 60 joueurs, structure live, pauses guidées. Pour tenir la distance comme à Malte.</p>
+        </button>
         <button className="mode" onClick={() => onPick('cash')}>
           <div className="icon">♦</div>
           <h3>Cash game</h3>
