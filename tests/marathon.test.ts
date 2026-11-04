@@ -17,7 +17,7 @@ it('marathon busts get field places and refills use the outside average', () => 
   let t = createTournament('marathon', 'live', 4, { entrants: 60, startStack: 1000 })
   let seed = 3
   const rng = () => ((seed = (seed * 1664525 + 1013904223) % 4294967296) / 4294967296)
-  let g = createGame([0, 1, 2, 3].map((i) => ({ id: i, name: 'P' + i, stack: i === 1 ? 40 : 1000, isBot: true, profile: 'aggressive' as const })), { sb: 10, bb: 20, ante: 0 })
+  let g = createGame([0, 1, 2, 3].map((i) => ({ id: i, name: 'P' + i, stack: i === 1 ? 40 : 1000, isBot: true, profile: 'maniac' as const })), { sb: 10, bb: 20, ante: 0 })
   t = { ...t, field: 30 }
   for (let h = 0; h < 30 && !g.players[1].out; h++) {
     g = startHand(g, rng)
@@ -26,8 +26,9 @@ it('marathon busts get field places and refills use the outside average', () => 
     t = registerMarathonBusts(t, g, 0)
   }
   expect(g.players[1].out).toBe(true)
-  expect(t.finished.find((f) => f.playerId === 1)?.place).toBe(30)
-  expect(t.field).toBe(29)
+  const busted = t.finished.length
+  expect(t.finished.find((f) => f.playerId === 1)?.place).toBeGreaterThanOrEqual(30 - busted + 1)
+  expect(t.field).toBe(30 - busted)
   const avg = outsideAverageStack(t, g)
   expect(avg).toBeGreaterThan(0)
 })

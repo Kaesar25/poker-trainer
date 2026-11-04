@@ -1,10 +1,11 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { GameState } from '../engine/game'
 import { totalPot } from '../engine/game'
 import { positionOf } from '../engine/coach'
 import { CardView } from './CardView'
 import { Chips } from './Chips'
 import { Seat } from './Seat'
+import { TableFx } from './Fx'
 
 const LAYOUTS: Record<number, [number, number][]> = {
   2: [[50, 84], [50, 16]],
@@ -21,8 +22,8 @@ const PORTRAIT: Record<number, [number, number][]> = {
   4: [[50, 86], [12, 55], [50, 10], [88, 55]],
   5: [[50, 86], [12, 62], [18, 22], [82, 22], [88, 62]],
   6: [[50, 86], [12, 64], [14, 28], [50, 9], [86, 28], [88, 64]],
-  7: [[50, 86], [12, 66], [10, 38], [28, 12], [72, 12], [90, 38], [88, 66]],
-  8: [[50, 86], [12, 70], [8, 46], [20, 20], [50, 8], [80, 20], [92, 46], [88, 70]],
+  7: [[50, 86], [15, 66], [13, 38], [30, 12], [70, 12], [87, 38], [85, 66]],
+  8: [[50, 86], [16, 70], [13, 46], [24, 19], [50, 8], [76, 19], [87, 46], [84, 70]],
 }
 
 function usePortrait() {
@@ -41,13 +42,15 @@ interface Props {
   heroIdx: number
   showLog: boolean
   tournament: boolean
+  compact?: boolean
   children?: React.ReactNode
 }
 
-export function Table({ state: s, heroIdx, showLog, tournament, children }: Props) {
+export function Table({ state: s, heroIdx, showLog, tournament, compact, children }: Props) {
   const n = s.players.length
   const portrait = usePortrait()
-  const layout = (portrait ? PORTRAIT : LAYOUTS)[n] ?? LAYOUTS[6]
+  const layout = (portrait ? PORTRAIT : LAYOUTS)[Math.min(8, Math.max(2, n))] ?? LAYOUTS[6]
+  const seatPos = useCallback((i: number): [number, number] => layout[(i - heroIdx + n) % n] ?? [50, 50], [layout, heroIdx, n])
   const pot = totalPot(s)
   const winners = s.result?.winners ?? []
   const winBy = (id: number) => winners.filter((w) => w.playerId === id).reduce((a, w) => a + w.amount, 0)
@@ -61,8 +64,9 @@ export function Table({ state: s, heroIdx, showLog, tournament, children }: Prop
   }, [pot])
 
   return (
-    <div className="table-wrap">
+    <div className={'table-wrap' + (compact ? ' compact' : '')}>
       <div className="table">
+        <div className="felt-light" />
         <div className="logo">POKER TRAINER</div>
         {showLog && <div className="log">{s.log.slice(-10).map((l, i) => <div key={i}>{l}</div>)}</div>}
         <div className="center">
@@ -103,6 +107,7 @@ export function Table({ state: s, heroIdx, showLog, tournament, children }: Prop
           const cy = y + (50 - y) * (portrait ? 0.42 : 0.45)
           return <Chips key={`c${p.id}-${p.bet}`} amount={p.bet} x={cx} y={cy} />
         })}
+        {!compact && <TableFx state={s} seatPos={seatPos} heroIdx={heroIdx} />}
         {children}
       </div>
     </div>

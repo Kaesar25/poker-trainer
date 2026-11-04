@@ -1,5 +1,5 @@
 import type { Card } from './cards'
-import { equity, preflopStrength } from './bots'
+import { equity, equityVsBettingRange, preflopStrength } from './bots'
 import { legalActions, totalPot, type GameState } from './game'
 
 export type Position = 'BTN' | 'SB' | 'BB' | 'UTG' | 'UTG+1' | 'MP' | 'HJ' | 'CO'
@@ -40,7 +40,12 @@ export function advise(s: GameState, heroIdx: number, rng: () => number = Math.r
   const pot = totalPot(s)
   const opponents = s.players.filter((p) => !p.out && !p.folded && p.id !== hero.id).length
   const potOdds = la.callAmount > 0 ? la.callAmount / (pot + la.callAmount) : 0
-  const eq = s.street === 'preflop' ? preflopEquityEstimate(hero.cards, opponents) : equity(hero.cards, s.board, opponents, 400, rng)
+  const facingBet = la.callAmount > 0 && s.street !== 'preflop'
+  const eq = s.street === 'preflop'
+    ? preflopEquityEstimate(hero.cards, opponents)
+    : facingBet
+      ? equityVsBettingRange(hero.cards, s.board, s.street as 'flop' | 'turn' | 'river', la.callAmount / Math.max(1, pot - la.callAmount), 300, rng)
+      : equity(hero.cards, s.board, opponents, 400, rng)
   const pct = (x: number) => `${Math.round(x * 100)} %`
   const bbs = hero.stack / s.blinds.bb
 
@@ -89,9 +94,9 @@ export function advise(s: GameState, heroIdx: number, rng: () => number = Math.r
   if (margin > 0.03) {
     const risk = la.callAmount / hero.stack
     if (risk > 0.5 && eq < 0.6) return { equity: eq, potOdds, action: 'fold', title: 'Se coucher (prudence)', reason: `Le call est à peine rentable (équité ${pct(eq)} vs cote ${pct(potOdds)}) mais engage ${Math.round(risk * 100)} % de ton tapis. En tournoi, ce spot marginal n'en vaut pas la peine.` }
-    return { equity: eq, potOdds, action: 'call', title: 'Suivre', reason: `Équité ≈ ${pct(eq)} > cote du pot ${pct(potOdds)} : le call est rentable.` }
+    return { equity: eq, potOdds, action: 'call', title: 'Suivre', reason: `Contre le range de mains qui misent ici, équité ≈ ${pct(eq)} > cote du pot ${pct(potOdds)} : le call est rentable.` }
   }
-  return { equity: eq, potOdds, action: 'fold', title: 'Se coucher', reason: `Équité ≈ ${pct(eq)} < cote du pot ${pct(potOdds)} : payer perd des jetons à long terme.` }
+  return { equity: eq, potOdds, action: 'fold', title: 'Se coucher', reason: `Contre le range de mains qui misent ici, équité ≈ ${pct(eq)} < cote du pot ${pct(potOdds)} : payer perd des jetons à long terme.` }
 }
 
 function preflopEquityEstimate(cards: Card[], opponents: number): number {

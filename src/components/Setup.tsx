@@ -26,6 +26,8 @@ export function Setup({ mode, onStart, onBack, coach, setCoach }: { mode: Mode; 
   const [structureId, setStructureId] = useState(mode === 'chipleader' ? 'standard' : mode === 'marathon' ? 'live' : 'turbo')
   const [botSpeed, setBotSpeed] = useState(1)
   const [checkin, setCheckin] = useState<CheckIn>({ energy: 3, mood: 3, focus: 3 })
+  const [entrants, setEntrants] = useState(60)
+  const [reentry, setReentry] = useState(mode === 'marathon' ? 4 : 0)
   const [title, desc] = TITLES[mode]
   const tournament = mode !== 'cash'
   return (
@@ -43,6 +45,18 @@ export function Setup({ mode, onStart, onBack, coach, setCoach }: { mode: Mode; 
         <div className="field">
           <div className="lbl">{mode === 'cash' ? 'Tapis de départ' : 'Tapis de départ (tournoi)'}</div>
           <div className="seg">{(mode === 'cash' ? [1000, 2000, 4000, 10000] : mode === 'marathon' ? [10000, 20000, 30000] : [1500, 3000, 5000, 10000]).map((k) => <button key={k} className={k === stack ? 'on' : ''} onClick={() => setStack(k)}>{k.toLocaleString('fr-FR')}{mode === 'cash' ? ` (${k / 20} BB)` : mode === 'marathon' ? ` (${k / 50} BB)` : ''}</button>)}</div>
+        </div>
+      )}
+      {mode === 'marathon' && (
+        <div className="field">
+          <div className="lbl">Taille du tournoi</div>
+          <div className="seg">{[30, 60, 120, 250].map((k) => <button key={k} className={k === entrants ? 'on' : ''} onClick={() => setEntrants(k)}>{k} joueurs · {k <= 30 ? 6 : Math.max(9, Math.round(k * 0.15))} payés</button>)}</div>
+        </div>
+      )}
+      {(mode === 'marathon' || mode === 'sng') && (
+        <div className="field">
+          <div className="lbl">Re-entry (100 ₵ par rentrée)</div>
+          <div className="seg">{[[0, 'Aucun'], [2, 'Jusqu\'au niveau 2'], [4, 'Jusqu\'au niveau 4'], [8, 'Jusqu\'au niveau 8']].map(([v, l]) => <button key={v} className={v === reentry ? 'on' : ''} onClick={() => setReentry(v as number)}>{l}</button>)}</div>
         </div>
       )}
       {tournament && (
@@ -71,7 +85,7 @@ export function Setup({ mode, onStart, onBack, coach, setCoach }: { mode: Mode; 
           <Slider label="Concentration" hint={['Dispersé', 'Rien d\'autre en tête']} value={checkin.focus} onChange={(v) => setCheckin({ ...checkin, focus: v })} />
         </div>
       )}
-      <button className="primary" onClick={() => onStart({ mode, players, stack, structureId, botSpeed, checkin: tournament ? checkin : undefined })}>{mode === 'marathon' ? 'Démarrer le marathon' : 'Lancer la partie'}</button>
+      <button className="primary" onClick={() => onStart({ mode, players, stack, structureId, botSpeed, checkin: tournament ? checkin : undefined, entrants, reentryUntilLevel: reentry })}>{mode === 'marathon' ? 'Démarrer le marathon' : 'Lancer la partie'}</button>
     </div>
   )
 }

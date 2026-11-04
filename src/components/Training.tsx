@@ -4,7 +4,7 @@ import { LEVELS } from '../content/lessons'
 
 const TYPES: DrillType[] = ['preflop', 'odds', 'outs', 'board', 'pushfold', 'icm']
 
-export function Training({ store, onDaily, onDrill, onLearn, onBack, onMarathon }: { store: Store; onDaily: () => void; onDrill: (t: DrillType) => void; onLearn: () => void; onBack: () => void; onMarathon: () => void }) {
+export function Training({ store, onDaily, onDrill, onLearn, onBack, onMarathon, onPuzzle }: { store: Store; onDaily: () => void; onDrill: (t: DrillType) => void; onLearn: () => void; onBack: () => void; onMarathon: () => void; onPuzzle: () => void }) {
   const lv = levelFor(store.xp)
   const en = endurance(store)
   const doneToday = store.streak.lastDay === new Date().toISOString().slice(0, 10)
@@ -27,6 +27,14 @@ export function Training({ store, onDaily, onDrill, onLearn, onBack, onMarathon 
           <p>Préflop, cotes, outs, board, push/fold, ICM. Cinq minutes pour garder le rythme.</p>
         </div>
         <div className="daily-r">▶</div>
+      </button>
+      <button className="daily puzzlecard" onClick={onPuzzle}>
+        <div className="daily-l">
+          <div className="pill">Casse-tête · en continu</div>
+          <h3>Une situation, une décision, la suivante</h3>
+          <p>Des mains réelles jouées par les bots, arrêtées au moment où tu dois choisir. La difficulté monte avec ta série. {store.puzzles.asked ? `Série en cours : ${store.puzzles.streak}, record ${store.puzzles.best}, ${store.puzzles.solved}/${store.puzzles.asked} résolus.` : ''}</p>
+        </div>
+        <div className="daily-r">♟</div>
       </button>
       <div className="drillgrid">
         {TYPES.map((t) => {

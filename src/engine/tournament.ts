@@ -44,14 +44,16 @@ export interface Tournament {
   field: number
   tableSize: number
   startStack: number
+  reentries?: number
+  reentryUntilLevel?: number // re-entry allowed while currentLevelIndex < this
+  tableNumber?: number
 }
 
-export function createTournament(mode: TournamentMode, structureId: string, tablePlayers: number, opts: { buyIn?: number; startLevel?: number; entrants?: number; startStack?: number } = {}): Tournament {
+export function createTournament(mode: TournamentMode, structureId: string, tablePlayers: number, opts: { buyIn?: number; startLevel?: number; entrants?: number; startStack?: number; reentryUntilLevel?: number } = {}): Tournament {
   const entrants = opts.entrants ?? tablePlayers
   const buyIn = opts.buyIn ?? 100
   const prizePool = buyIn * entrants
-  const pct = entrants <= 3 ? [0.65, 0.35] : entrants <= 6 ? [0.5, 0.3, 0.2] : entrants <= 12 ? [0.45, 0.27, 0.18, 0.1] : entrants <= 30 ? [0.4, 0.25, 0.15, 0.1, 0.06, 0.04] : [0.27, 0.18, 0.13, 0.1, 0.08, 0.07, 0.06, 0.055, 0.055]
-  const payouts = pct.map((p) => Math.round(prizePool * p))
+  const payouts = payoutTable(entrants, prizePool)
   return {
     mode, structureId, entrants, buyIn, prizePool, payouts,
     startLevel: opts.startLevel ?? 0,
@@ -62,7 +64,20 @@ export function createTournament(mode: TournamentMode, structureId: string, tabl
     field: entrants,
     tableSize: tablePlayers,
     startStack: opts.startStack ?? 0,
+    reentries: 0,
+    reentryUntilLevel: opts.reentryUntilLevel ?? 0,
+    tableNumber: 1,
   }
+}
+
+/** Payout structure: fixed small-field tables, then ~15 % of the field paid with a geometric curve. */
+export function payoutTable(entrants: number, prizePool: number): number[] {
+  const pct = entrants <= 3 ? [0.65, 0.35] : entrants <= 6 ? [0.5, 0.3, 0.2] : entrants <= 12 ? [0.45, 0.27, 0.18, 0.1] : entrants <= 30 ? [0.4, 0.25, 0.15, 0.1, 0.06, 0.04] : null
+  if (pct) return pct.map((p) => Math.round(prizePool * p))
+  const paid = Math.max(9, Math.round(entrants * 0.15))
+  const w = Array.from({ length: paid }, (_, i) => 1 / Math.pow(i + 1, 1.05))
+  const sum = w.reduce((a, b) => a + b, 0)
+  return w.map((x) => Math.round((prizePool * x) / sum))
 }
 
 export function structureOf(t: Tournament): Structure {
@@ -142,6 +157,36 @@ export function targetField(t: Tournament, levelIndex: number, tableAlive: numbe
   const progress = Math.min(1, levelIndex / (st.levels.length - 2))
   const target = Math.round(t.entrants * Math.pow(1 - progress, 1.35))
   return Math.max(tableAlive, Math.min(t.field, target))
+}
+
+/** Continuous version: expected field size at this instant (fractional level). */
+export function expectedField(t: Tournament, now = Date.now()): number {
+  const st = structureOf(t)
+  const levelFloat = t.startLevel + elapsed(t, now) / (st.levelSeconds * 1000)
+  const progress = Math.min(1, levelFloat / (st.levels.length - 2))
+  return t.entrants * Math.pow(1 - progress, 1.35)
+}
+
+/** Estimated overall rank of a stack in a field, assuming a right-skewed stack distribution. */
+export function estimateRank(t: Tournament, s: GameState, stack: number): number {
+  const alive = s.players.filter((p) => !p.out)
+  const aboveAtTable = alive.filter((p) => p.stack > stack).length
+  const outside = t.field - alive.length
+  if (outside <= 0) return aboveAtTable + 1
+  const total = t.entrants * t.startStack
+  const tableChips = alive.reduce((a, p) => a + p.stack, 0)
+  const avg = (total - tableChips) / outside
+  const ratio = stack / Math.max(1, avg)
+  // share of outside players with more chips than `stack`
+  const share = ratio >= 3 ? 0.03 : ratio >= 2 ? 0.1 : ratio >= 1.5 ? 0.2 : ratio >= 1 ? 0.35 : ratio >= 0.7 ? 0.55 : ratio >= 0.4 ? 0.75 : 0.9
+  return aboveAtTable + Math.round(outside * share) + 1
+}
+
+/** Re-entry: hero gets a fresh stack, the field and prize pool grow. */
+export function reenter(t: Tournament, heroId: number): Tournament {
+  const entrants = t.entrants + 1
+  const prizePool = t.buyIn * entrants
+  return { ...t, entrants, prizePool, payouts: payoutTable(entrants, prizePool), field: t.field + 1, finished: t.finished.filter((f) => f.playerId !== heroId), heroPlace: null, reentries: (t.reentries ?? 0) + 1 }
 }
 
 /** Marathon: register table busts with their place in the whole field. */

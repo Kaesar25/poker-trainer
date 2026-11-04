@@ -5,9 +5,9 @@ it('bots play 200 hands without error and conserve chips', () => {
   let seed = 7
   const rng = () => ((seed = (seed * 1664525 + 1013904223) % 4294967296) / 4294967296)
   let s = createGame([
-    { id: 0, name: 'A', stack: 2000, isBot: true, profile: 'tight' },
-    { id: 1, name: 'B', stack: 2000, isBot: true, profile: 'loose' },
-    { id: 2, name: 'C', stack: 2000, isBot: true, profile: 'aggressive' },
+    { id: 0, name: 'A', stack: 2000, isBot: true, profile: 'nit' },
+    { id: 1, name: 'B', stack: 2000, isBot: true, profile: 'fish' },
+    { id: 2, name: 'C', stack: 2000, isBot: true, profile: 'lag' },
     { id: 3, name: 'D', stack: 2000, isBot: true, profile: 'station' },
     { id: 4, name: 'E', stack: 2000, isBot: true, profile: 'bully' },
     { id: 5, name: 'F', stack: 2000, isBot: true, profile: 'bluffer' },

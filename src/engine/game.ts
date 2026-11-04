@@ -1,8 +1,8 @@
 import { newDeck, shuffle, type Card, cardToString } from './cards'
-import { evaluate, describe, type HandValue } from './evaluator'
+import { evaluate, describe, describeDetailed, type HandValue } from './evaluator'
 
 export type Street = 'idle' | 'preflop' | 'flop' | 'turn' | 'river' | 'showdown'
-export type BotProfile = 'tight' | 'loose' | 'aggressive' | 'station' | 'bully' | 'bluffer'
+export type BotProfile = 'nit' | 'rock' | 'tag' | 'lag' | 'maniac' | 'station' | 'bluffer' | 'trapper' | 'shortstack' | 'tilter' | 'fish' | 'bully'
 
 export interface Player {
   id: number
@@ -17,6 +17,8 @@ export interface Player {
   allIn: boolean
   out: boolean // busted
   showCards: boolean
+  mood?: number // bots: hands of tilt remaining
+  memo?: { vsHeroHands: number; heroShowdownsWeak: number } // bots' memory of the hero
 }
 
 export interface ActionRecord {
@@ -50,6 +52,7 @@ export interface GameState {
   minRaise: number
   acting: number // index of player to act, -1 if none
   lastAggressor: number
+  pfAggressor: number // index of the last preflop raiser (-1 if none)
   toAct: number[] // ids who still need to act this street
   blinds: { sb: number; bb: number; ante: number }
   handNumber: number
@@ -70,6 +73,7 @@ export function createGame(players: Omit<Player, 'cards' | 'bet' | 'totalBet' | 
     minRaise: blinds.bb,
     acting: -1,
     lastAggressor: -1,
+    pfAggressor: -1,
     toAct: [],
     blinds,
     handNumber: 0,
@@ -168,6 +172,7 @@ export function startHand(prev: GameState, rng: () => number = Math.random): Gam
   s.log.push(`${s.players[sbIdx].name} poste SB ${s.blinds.sb}, ${s.players[bbIdx].name} poste BB ${s.blinds.bb}`)
 
   s.street = 'preflop'
+  s.pfAggressor = -1
   s.currentBet = s.blinds.bb
   s.minRaise = s.blinds.bb
   s.lastAggressor = bbIdx
@@ -267,6 +272,7 @@ function advanceStreet(prev: GameState): GameState {
   s.currentBet = 0
   s.minRaise = s.blinds.bb
   if (s.street === 'river') return settle(s)
+  if (s.street === 'preflop') s.pfAggressor = s.lastAggressor
   if (s.street === 'preflop') s.board.push(s.deck.pop()!, s.deck.pop()!, s.deck.pop()!), (s.street = 'flop')
   else if (s.street === 'flop') s.board.push(s.deck.pop()!), (s.street = 'turn')
   else if (s.street === 'turn') s.board.push(s.deck.pop()!), (s.street = 'river')
@@ -308,7 +314,7 @@ function settle(s: GameState): GameState {
       values.set(p.id, v)
       p.showCards = true
       result.revealed[p.id] = p.cards
-      result.descriptions[p.id] = describe(v)
+      result.descriptions[p.id] = describeDetailed(p.cards, s.board).made
     }
     // side pots
     const levels = Array.from(new Set(s.players.filter((p) => p.totalBet > 0).map((p) => p.totalBet))).sort((a, b) => a - b)
@@ -339,6 +345,13 @@ function settle(s: GameState): GameState {
     // antes already in pot but not in totalBet accounting? they are (commit adds to totalBet). Any rounding leftover:
     const leftover = s.pot - distributed
     if (leftover > 0) contenders[0].stack += leftover
+  }
+  // mood: a bot that lost a big pot may tilt for a few hands (profile-dependent, see bots.ts)
+  for (const p of s.players) {
+    if (!p.isBot || p.out) continue
+    const lost = p.totalBet - result.winners.filter((w) => w.playerId === p.id).reduce((a, w) => a + w.amount, 0)
+    if (lost > 0 && lost >= 0.3 * (p.stack + lost)) p.mood = (p.mood ?? 0) + 6
+    else if (p.mood && p.mood > 0) p.mood -= 1
   }
   s.pot = 0
   s.street = 'showdown'

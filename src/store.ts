@@ -5,7 +5,7 @@ export interface CheckIn { energy: number; mood: number; focus: number }
 export interface Decision { t: number; ms: number; mistake: boolean; hand: number }
 export interface SessionSummary {
   ts: number; mode: string; minutes: number; hands: number; net: number; place: number | null; entrants: number | null
-  checkin: CheckIn | null; lucidity: { bucket: number; n: number; errors: number; avgMs: number }[]; decisions: number; errors: number
+  checkin: CheckIn | null; lucidity: { bucket: number; n: number; errors: number; avgMs: number }[]; decisions: number; errors: number; bots?: { name: string; profile: string }[]
 }
 export interface JournalEntry { ts: number; mode: string; minutes: number; place: number | null; net: number; good: string; mistake: string; mental: string; checkin: CheckIn | null }
 export interface TournamentResult { ts: number; mode: 'sng' | 'chipleader' | 'marathon'; place: number | null; entrants: number; paid: boolean; prize: number; structure: string; checkin?: CheckIn; minutes?: number }
@@ -15,7 +15,7 @@ export interface DrillProgress { asked: number; correct: number; recent: boolean
 export interface Store {
   hands: HandRecord[]
   tournaments: TournamentResult[]
-  settings: { coach: boolean; botSpeed: number; name: string }
+  settings: { coach: boolean; botSpeed: number; name: string; sound: boolean }
   bankroll: number
   drills: Partial<Record<DrillType, DrillProgress>>
   lessonsRead: string[]
@@ -23,12 +23,13 @@ export interface Store {
   xp: number
   sessions: SessionSummary[]
   journal: JournalEntry[]
+  puzzles: { solved: number; asked: number; best: number; streak: number }
 }
 
 const KEY = 'poker-trainer-v1'
 const DEFAULT: Store = {
-  hands: [], tournaments: [], settings: { coach: true, botSpeed: 1, name: 'Toi' }, bankroll: 10000,
-  drills: {}, lessonsRead: [], streak: { count: 0, lastDay: '' }, xp: 0, sessions: [], journal: [],
+  hands: [], tournaments: [], settings: { coach: true, botSpeed: 1, name: 'Toi', sound: true }, bankroll: 10000,
+  drills: {}, lessonsRead: [], streak: { count: 0, lastDay: '' }, xp: 0, sessions: [], journal: [], puzzles: { solved: 0, asked: 0, best: 0, streak: 0 },
 }
 
 export function loadStore(): Store {
@@ -36,7 +37,7 @@ export function loadStore(): Store {
     const raw = localStorage.getItem(KEY)
     if (!raw) return DEFAULT
     const s = JSON.parse(raw)
-    return { ...DEFAULT, ...s, settings: { ...DEFAULT.settings, ...(s.settings ?? {}) }, drills: s.drills ?? {}, lessonsRead: s.lessonsRead ?? [], streak: s.streak ?? DEFAULT.streak, xp: s.xp ?? 0, sessions: s.sessions ?? [], journal: s.journal ?? [] }
+    return { ...DEFAULT, ...s, settings: { ...DEFAULT.settings, ...(s.settings ?? {}) }, drills: s.drills ?? {}, lessonsRead: s.lessonsRead ?? [], streak: s.streak ?? DEFAULT.streak, xp: s.xp ?? 0, sessions: s.sessions ?? [], journal: s.journal ?? [], puzzles: s.puzzles ?? DEFAULT.puzzles }
   } catch {
     return DEFAULT
   }
@@ -88,4 +89,9 @@ export function endurance(s: Store): { longest: number; weekMinutes: number; tar
   const weekMinutes = week.reduce((a, x) => a + x.minutes, 0)
   const target = longest < 30 ? 30 : Math.min(300, Math.ceil((longest * 1.25) / 15) * 15)
   return { longest, weekMinutes, target, sessionsThisWeek: week.length }
+}
+
+export function recordPuzzle(s: Store, ok: boolean): Store {
+  const streak = ok ? s.puzzles.streak + 1 : 0
+  return { ...s, puzzles: { solved: s.puzzles.solved + (ok ? 1 : 0), asked: s.puzzles.asked + 1, best: Math.max(s.puzzles.best, streak), streak }, xp: s.xp + (ok ? 15 : 3) }
 }

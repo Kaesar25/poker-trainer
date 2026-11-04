@@ -16,12 +16,17 @@ import { Learn } from './components/Learn'
 import { Drill } from './components/Drill'
 import { JournalModal, PauseOverlay, detectAlerts } from './components/Mental'
 import { dailySession, DRILL_META, type DrillType, type Question } from './engine/drills'
-import { recordAnswer, type SessionSummary } from './store'
+import { recordAnswer, recordPuzzle, type SessionSummary } from './store'
+import { HandBar } from './components/HandBar'
+import { PuzzleScreen } from './components/Puzzle'
+import { PERSONALITIES } from './engine/bots'
+import { haptic, setSoundEnabled } from './fx/sound'
 
-type Screen = 'home' | 'setup' | 'history' | 'stats' | 'training' | 'learn' | 'drill' | 'drill-result' | 'journal'
+type Screen = 'home' | 'setup' | 'history' | 'stats' | 'training' | 'learn' | 'drill' | 'drill-result' | 'journal' | 'puzzle'
 
 export default function App() {
-  const { store, updateStore, session, start, act, nextHand, quit, setPaused } = useSession()
+  const { store, updateStore, session, saved, start, resumeSaved, discardSaved, leaveForLater, act, nextHand, quit, setPaused, doReenter } = useSession()
+  const [quitMenu, setQuitMenu] = useState(false)
   const [screen, setScreen] = useState<Screen>('home')
   const [mode, setMode] = useState<Mode>('cash')
   const [showLog, setShowLog] = useState(false)
@@ -31,6 +36,7 @@ export default function App() {
   const [dismissedAlert, setDismissedAlert] = useState<string | null>(null)
   const [tick, setTick] = useState(0)
   const coach = store.settings.coach
+  useEffect(() => { setSoundEnabled(store.settings.sound !== false) }, [store.settings.sound])
   const setCoach = (v: boolean) => updateStore((s) => ({ ...s, settings: { ...s.settings, coach: v } }))
   const startDrill = (t: DrillType, back: Screen = 'training') => { setDrill({ questions: null, type: t, title: DRILL_META[t].name, back }); setScreen('drill') }
   const startDaily = () => { setDrill({ questions: dailySession(), title: 'Séance du jour', back: 'training' }); setScreen('drill') }
@@ -72,7 +78,8 @@ export default function App() {
     if (screen === 'setup') return <div className="app"><Setup mode={mode} onStart={(c) => { start(c); setScreen('home'); setDismissedAlert(null) }} onBack={() => setScreen('home')} coach={coach} setCoach={setCoach} /></div>
     if (screen === 'history') return <div className="app"><History hands={store.hands} journal={store.journal} onBack={() => setScreen('home')} /></div>
     if (screen === 'stats') return <div className="app"><StatsScreen store={store} onBack={() => setScreen('home')} /></div>
-    if (screen === 'training') return <div className="app"><Training store={store} onDaily={startDaily} onDrill={(t) => startDrill(t)} onLearn={() => setScreen('learn')} onBack={() => setScreen('home')} onMarathon={() => { setMode('marathon'); setScreen('setup') }} /></div>
+    if (screen === 'training') return <div className="app"><Training store={store} onDaily={startDaily} onDrill={(t) => startDrill(t)} onLearn={() => setScreen('learn')} onBack={() => setScreen('home')} onMarathon={() => { setMode('marathon'); setScreen('setup') }} onPuzzle={() => setScreen('puzzle')} /></div>
+    if (screen === 'puzzle') return <div className="app"><PuzzleScreen store={store} onResult={(ok) => updateStore((st) => recordPuzzle(st, ok))} onBack={() => setScreen('training')} /></div>
     if (screen === 'learn') return <div className="app"><Learn store={store} onRead={(id) => updateStore((st) => st.lessonsRead.includes(id) ? st : { ...st, lessonsRead: [...st.lessonsRead, id], xp: st.xp + 30 })} onDrill={(t) => startDrill(t, 'learn')} onBack={() => setScreen('training')} /></div>
     if (screen === 'drill') return <div className="app"><Drill key={drill.title + (drill.type ?? '')} questions={drill.questions} type={drill.type} title={drill.title} onAnswer={(t, ok, ms) => updateStore((st) => recordAnswer(st, t, ok, ms))} onExit={(sum) => { setDrillResult(sum); setScreen(sum.asked > 0 ? 'drill-result' : drill.back) }} /></div>
     if (screen === 'drill-result') {
@@ -89,7 +96,8 @@ export default function App() {
         </div></div>
       )
     }
-    return <div className="app"><Home store={store} tab="home" onPick={(m) => { setMode(m); setScreen('setup') }} onNav={(t) => setScreen(t)} onTrain={() => setScreen('training')} /></div>
+    const savedInfo = saved ? { mode: saved.mode, hands: saved.records.length, minutes: Math.round(saved.playedMs / 60000), stack: saved.state.players[HERO].stack, bb: saved.state.blinds.bb } : null
+    return <div className="app"><Home store={store} tab="home" onPick={(m) => { setMode(m); setScreen('setup') }} onNav={(t) => setScreen(t)} onTrain={() => setScreen('training')} saved={savedInfo} onResume={resumeSaved} onDiscard={discardSaved} /></div>
   }
 
   const st = session.state
@@ -101,7 +109,7 @@ export default function App() {
   return (
     <div className="app">
       <div className="game">
-        <Hud state={st} tournament={session.tournament} mode={session.mode} heroIdx={HERO} showLog={showLog} onToggleLog={() => setShowLog((v) => !v)} coach={coach} onToggleCoach={() => setCoach(!coach)} onQuit={endSession} playedMs={played} onPause={() => setPaused(true, 'manual')} />
+        <Hud state={st} tournament={session.tournament} mode={session.mode} heroIdx={HERO} showLog={showLog} onToggleLog={() => setShowLog((v) => !v)} coach={coach} onToggleCoach={() => setCoach(!coach)} onQuit={() => setQuitMenu(true)} playedMs={played} onPause={() => setPaused(true, 'manual')} events={session.events} sound={store.settings.sound !== false} onToggleSound={() => updateStore((st) => ({ ...st, settings: { ...st.settings, sound: !(st.settings.sound !== false) } }))} />
         <Table state={st} heroIdx={HERO} showLog={showLog} tournament={!!session.tournament} />
         {session.paused && !session.over && <PauseOverlay reason={session.pauseReason} state={st} heroIdx={HERO} onResume={() => setPaused(false)} />}
         {session.over && (
@@ -116,7 +124,23 @@ export default function App() {
                 <div className="cell"><div className="v">{session.records.filter((h) => h.heroWon).length}</div><div className="l">mains gagnées</div></div>
                 <div className="cell"><div className="v">{session.decisions.length ? `${Math.round((1 - session.decisions.filter((d) => d.mistake).length / session.decisions.length) * 100)} %` : '—'}</div><div className="l">décisions alignées avec le coach</div></div>
               </div>
-              <button className="primary" onClick={endSession}>Continuer</button>
+              {session.canReenter && <button className="primary" onClick={doReenter}>Re-entry · 100 ₵ (bankroll {store.bankroll})</button>}
+              <button className={session.canReenter ? 'ghost' : 'primary'} onClick={endSession}>{session.canReenter ? 'Non, j\'arrête là' : 'Continuer'}</button>
+              <div className="reveal">
+                <div className="l" style={{ marginBottom: 6 }}>Qui étaient tes adversaires</div>
+                {st.players.filter((p) => p.isBot).slice(0, 8).map((p) => <div key={p.id} className="reveal-row"><b>{p.name}</b> · {PERSONALITIES[p.profile!].label} — <span>{PERSONALITIES[p.profile!].tell}</span></div>)}
+              </div>
+            </div>
+          </div>
+        )}
+        {quitMenu && (
+          <div className="overlay" onClick={() => setQuitMenu(false)}>
+            <div className="modal" onClick={(e) => e.stopPropagation()}>
+              <h2>Quitter la table ?</h2>
+              <p>Tu peux mettre la partie de côté et la reprendre plus tard depuis l'accueil (horloge en pause), ou la terminer maintenant.</p>
+              <button className="primary" onClick={() => { setQuitMenu(false); leaveForLater(); setScreen('home') }}>Sauvegarder et reprendre plus tard</button>
+              <button className="ghost" onClick={() => { setQuitMenu(false); endSession() }}>Terminer la session</button>
+              <button className="ghost" onClick={() => setQuitMenu(false)}>Rester à table</button>
             </div>
           </div>
         )}
@@ -131,8 +155,9 @@ export default function App() {
           </div>
         )}
         {!session.over && session.mode === 'cash' && isHandOver(st) ? <div className="hint" style={{ padding: '4px 0 0' }}>Session : {sessionNet >= 0 ? '+' : ''}{sessionNet} jetons sur {session.records.length} mains · {Math.round(played / 60000)} min</div> : null}
+        <HandBar state={st} heroIdx={HERO} />
         {advice && <CoachPanel advice={advice} position={positionOf(st, HERO)} />}
-        <Controls state={st} heroIdx={HERO} onAction={act} onNext={nextHand} advice={advice} over={session.over || session.paused} />
+        <Controls state={st} heroIdx={HERO} onAction={(a) => { haptic(); act(a) }} onNext={nextHand} advice={advice} over={session.over || session.paused} />
       </div>
     </div>
   )

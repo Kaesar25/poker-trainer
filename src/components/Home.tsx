@@ -3,7 +3,7 @@ import type { Mode } from '../hooks/useSession'
 import { computeStats } from '../engine/stats'
 import { levelFor } from '../store'
 
-export function Home({ store, onPick, onNav, onTrain, tab }: { store: Store; onPick: (m: Mode) => void; onNav: (t: 'home' | 'history' | 'stats') => void; onTrain: () => void; tab: string }) {
+export function Home({ store, onPick, onNav, onTrain, tab, saved, onResume, onDiscard }: { store: Store; onPick: (m: Mode) => void; onNav: (t: 'home' | 'history' | 'stats') => void; onTrain: () => void; tab: string; saved: { mode: string; hands: number; minutes: number; stack: number; bb: number } | null; onResume: () => void; onDiscard: () => void }) {
   const st = computeStats(store.hands, 0, store.tournaments)
   const lv = levelFor(store.xp)
   const doneToday = store.streak.lastDay === new Date().toISOString().slice(0, 10)
@@ -27,6 +27,19 @@ export function Home({ store, onPick, onNav, onTrain, tab }: { store: Store; onP
           <div className="kpi"><div className="v">Niv. {lv.level}</div><div className="l">{lv.title}</div></div>
         </div>
       </div>
+      {saved && (
+        <div className="resume">
+          <div className="resume-l">
+            <div className="pill">Partie en cours</div>
+            <h3>{saved.mode === 'cash' ? 'Cash game' : saved.mode === 'sng' ? 'Sit & Go' : saved.mode === 'marathon' ? 'Marathon' : 'Chip leader'} · {saved.hands} main{saved.hands > 1 ? 's' : ''} · {saved.minutes} min</h3>
+            <p>Ton tapis : {saved.stack} ({Math.round(saved.stack / saved.bb)} BB). L'horloge du tournoi est en pause.</p>
+          </div>
+          <div className="resume-r">
+            <button className="primary" onClick={onResume}>Reprendre</button>
+            <button className="ghost" onClick={onDiscard}>Abandonner</button>
+          </div>
+        </div>
+      )}
       <button className="mode train" onClick={onTrain}>
         <span className="pill">{doneToday ? `🔥 ${store.streak.count} j · séance faite` : 'Séance du jour à faire'}</span>
         <div className="icon">◆</div>
