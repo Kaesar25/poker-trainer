@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { HERO, PAUSE_EVERY_MS, TAG_LABEL, noteIsRight, playedMs, useSession, type Mode } from './hooks/useSession'
+import { HERO, PAUSE_EVERY_MS, TAG_LABEL, icmPressure, noteIsRight, playedMs, useSession, type Mode } from './hooks/useSession'
 import { advise, positionOf } from './engine/coach'
 import { isHandOver } from './engine/game'
 import { computeStats } from './engine/stats'
@@ -18,6 +18,7 @@ import { JournalModal, PauseOverlay, detectAlerts } from './components/Mental'
 import { dailySession, proSession, DRILL_META, type DrillType, type Question } from './engine/drills'
 import type { HandRecord } from './engine/stats'
 import { Replay } from './components/Replay'
+import { keyHands, type KeyHand } from './engine/keyhands'
 import { Leaks } from './components/Leaks'
 import { IcmTool } from './components/IcmTool'
 import { Challenges } from './components/Challenges'
@@ -34,6 +35,8 @@ export default function App() {
   const { store, updateStore, session, saved, setNote, start, resumeSaved, discardSaved, leaveForLater, act, nextHand, quit, setPaused, doReenter } = useSession()
   const [quitMenu, setQuitMenu] = useState(false)
   const [replayHand, setReplayHand] = useState<HandRecord | null>(null)
+  const [replayBack, setReplayBack] = useState<Screen>('history')
+  const [journalKeys, setJournalKeys] = useState<KeyHand[]>([])
   const [noteFor, setNoteFor] = useState<number | null>(null)
   const [challengesBack, setChallengesBack] = useState<Screen>('home')
   const [screen, setScreen] = useState<Screen>('home')
@@ -53,7 +56,7 @@ export default function App() {
 
   const s = session?.state
   const heroTurn = !!s && s.acting === HERO && !isHandOver(s)
-  const advice = useMemo(() => (s && heroTurn && coach && !session?.paused ? advise(s, HERO) : null), [s, heroTurn, coach, session?.paused])
+  const advice = useMemo(() => (s && heroTurn && coach && !session?.paused ? advise(s, HERO, Math.random, { icmPressure: icmPressure(session!) }) : null), [s, heroTurn, coach, session?.paused])
 
   useEffect(() => {
     if (!session) return
@@ -72,22 +75,37 @@ export default function App() {
     if (played - session.lastPauseAtMs >= PAUSE_EVERY_MS) setPaused(true, 'hourly')
   }, [session, played, setPaused])
 
+  const autoNext = store.settings.autoNext !== false
+  const handDone = !!session && isHandOver(session.state)
+  const heroShowdown = !!session && !!session.state.result && Object.keys(session.state.result.revealed).length > 1 && !session.state.players[HERO].folded
+  const heroWon = !!session && !!session.state.result?.winners.some((w) => w.playerId === HERO)
+  const aliveCount = session ? session.state.players.filter((p) => !p.out).length : 0
+  const autoNextMs = autoNext && handDone && aliveCount >= 2 && session && !session.over && !session.paused && !quitMenu ? (heroShowdown ? 3600 : heroWon ? 2200 : 1700) : null
+  useEffect(() => {
+    if (!autoNextMs) return
+    const id = setTimeout(() => nextHand(), autoNextMs)
+    return () => clearTimeout(id)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoNextMs, session?.state.handNumber])
+
   const endSession = () => {
+    const keys = session ? keyHands(session.records, session.decisions) : []
     const summary = quit()
+    setJournalKeys(keys)
     setShowLog(false)
-    if (summary && summary.mode !== 'cash' && (summary.hands >= 10 || summary.minutes >= 15)) { setJournalFor(summary); setScreen('journal') }
+    if (summary && (summary.hands >= 10 || summary.minutes >= 15)) { setJournalFor(summary); setScreen('journal') }
     else setScreen('home')
   }
 
   if (!session) {
     if (screen === 'journal' && journalFor) {
-      return <div className="app"><JournalModal mode={journalFor.mode} minutes={journalFor.minutes} place={journalFor.place} net={journalFor.net} checkin={journalFor.checkin}
+      return <div className="app"><JournalModal mode={journalFor.mode} minutes={journalFor.minutes} place={journalFor.place} net={journalFor.net} checkin={journalFor.checkin} keys={journalKeys} onReplay={(h) => { setReplayHand(h); setReplayBack('journal'); setScreen('replay') }}
         onSave={(e) => { updateStore((st) => ({ ...st, journal: [...st.journal, { ...e, ts: Date.now() }], xp: st.xp + 40 })); setJournalFor(null); setScreen('home') }}
         onSkip={() => { setJournalFor(null); setScreen('home') }} /></div>
     }
     if (screen === 'setup') return <div className="app"><Setup mode={mode} onStart={(c) => { start(c); setScreen('home'); setDismissedAlert(null) }} onBack={() => setScreen('home')} coach={coach} setCoach={setCoach} /></div>
-    if (screen === 'history') return <div className="app"><History hands={store.hands} journal={store.journal} onBack={() => setScreen('home')} onReplay={(h) => { setReplayHand(h); setScreen('replay') }} /></div>
-    if (screen === 'replay' && replayHand) return <div className="app"><Replay hand={replayHand} onBack={() => setScreen('history')} /></div>
+    if (screen === 'history') return <div className="app"><History hands={store.hands} journal={store.journal} onBack={() => setScreen('home')} onReplay={(h) => { setReplayHand(h); setReplayBack('history'); setScreen('replay') }} /></div>
+    if (screen === 'replay' && replayHand) return <div className="app"><Replay hand={replayHand} onBack={() => setScreen(replayBack)} /></div>
     if (screen === 'leaks') return <div className="app"><Leaks store={store} onDrill={(t) => startDrill(t, 'leaks')} onBack={() => setScreen('training')} /></div>
     if (screen === 'icm') return <div className="app"><IcmTool onBack={() => setScreen('training')} /></div>
     if (screen === 'challenges') return <div className="app"><Challenges store={store} onBack={() => setScreen(challengesBack)} onClaim={(key, xp) => updateStore((st) => (st.claimed.includes(key) ? st : { ...st, claimed: [...st.claimed, key].slice(-60), xp: st.xp + xp }))} /></div>
@@ -123,7 +141,7 @@ export default function App() {
   return (
     <div className="app">
       <div className="game">
-        <Hud state={st} tournament={session.tournament} mode={session.mode} heroIdx={HERO} showLog={showLog} onToggleLog={() => setShowLog((v) => !v)} coach={coach} onToggleCoach={() => setCoach(!coach)} onQuit={() => setQuitMenu(true)} playedMs={played} onPause={() => setPaused(true, 'manual')} events={session.events} sound={store.settings.sound !== false} onToggleSound={() => updateStore((st) => ({ ...st, settings: { ...st.settings, sound: !(st.settings.sound !== false) } }))} />
+        <Hud state={st} tournament={session.tournament} mode={session.mode} heroIdx={HERO} showLog={showLog} onToggleLog={() => setShowLog((v) => !v)} coach={coach} onToggleCoach={() => setCoach(!coach)} onQuit={() => setQuitMenu(true)} playedMs={played} onPause={() => setPaused(true, 'manual')} events={session.events} sound={store.settings.sound !== false} onToggleSound={() => updateStore((st) => ({ ...st, settings: { ...st.settings, sound: !(st.settings.sound !== false) } }))} autoNext={autoNext} onToggleAutoNext={() => updateStore((st) => ({ ...st, settings: { ...st.settings, autoNext: !(st.settings.autoNext !== false) } }))} />
         <Table state={st} heroIdx={HERO} showLog={showLog} tournament={!!session.tournament} notes={session.notes} noteLabel={(tag, text) => (tag ? TAG_LABEL[tag as keyof typeof TAG_LABEL] : text ? '📝' : undefined)} onSeatClick={(id) => setNoteFor(id)} />
         {noteFor !== null && (() => { const p = st.players.find((x) => x.id === noteFor); return p ? <NoteSheet name={p.name} note={session.notes[noteFor]} onSave={(n) => setNote(noteFor, n)} onClose={() => setNoteFor(null)} /> : null })()}
         {session.paused && !session.over && <PauseOverlay reason={session.pauseReason} state={st} heroIdx={HERO} onResume={() => setPaused(false)} />}
@@ -176,7 +194,7 @@ export default function App() {
         {!session.over && session.mode === 'cash' && isHandOver(st) ? <div className="hint" style={{ padding: '4px 0 0' }}>Session : {sessionNet >= 0 ? '+' : ''}{sessionNet} jetons sur {session.records.length} mains · {Math.round(played / 60000)} min</div> : null}
         <HandBar state={st} heroIdx={HERO} />
         {advice && <CoachPanel advice={advice} position={positionOf(st, HERO)} />}
-        <Controls state={st} heroIdx={HERO} onAction={(a) => { haptic(); act(a) }} onNext={nextHand} advice={advice} over={session.over || session.paused} />
+        <Controls state={st} heroIdx={HERO} onAction={(a) => { haptic(); act(a) }} onNext={nextHand} advice={advice} over={session.over || session.paused} autoNextMs={autoNextMs} />
       </div>
     </div>
   )

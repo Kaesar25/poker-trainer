@@ -179,7 +179,7 @@ export function useSession() {
       const st = sess.state
       let mistake = false
       try {
-        const adv = advise(st, HERO)
+        const adv = advise(st, HERO, Math.random, { icmPressure: icmPressure(sess) })
         if (adv) {
           const aggressive = a.type === 'bet' || a.type === 'raise' || a.type === 'allin'
           const passive = a.type === 'call' || a.type === 'check'
@@ -326,7 +326,7 @@ export function useSession() {
     if (isHandOver(s) || s.acting < 0 || !s.players[s.acting].isBot) return
     const speed = session.config.botSpeed ?? 1
     const model = heroModel([...storeRef.current.hands, ...session.records], HERO)
-    const decision = botDecideFull(s, Math.random, model)
+    const decision = botDecideFull(s, Math.random, model, { icmPressure: icmPressure(session) })
     timer.current = window.setTimeout(() => {
       setSession((sess) => {
         if (!sess || sess.paused) return sess
@@ -397,4 +397,17 @@ export function scoreNotes(notes: Session['notes']): { right: number; total: num
   let right = 0, total = 0
   for (const n of Object.values(notes)) { const r = noteIsRight(n.tag, n.profile); if (r === null) continue; total++; if (r) right++ }
   return { right, total }
+}
+
+/** 0..1 tournament pressure: high on the bubble, medium at the final table / in the money. */
+export function icmPressure(sess: Session): number {
+  const t = sess.tournament
+  if (!t || t.mode === 'headsup') return 0
+  const paid = t.payouts.length
+  const left = t.mode === 'marathon' ? t.field : sess.state.players.filter((p) => !p.out).length
+  if (left <= 1) return 0
+  if (left <= paid) return 0.6
+  if (left <= Math.ceil(paid * 1.4)) return 1
+  if (left <= paid * 2) return 0.4
+  return 0
 }

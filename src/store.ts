@@ -15,7 +15,7 @@ export interface DrillProgress { asked: number; correct: number; recent: boolean
 export interface Store {
   hands: HandRecord[]
   tournaments: TournamentResult[]
-  settings: { coach: boolean; botSpeed: number; name: string; sound: boolean }
+  settings: { coach: boolean; botSpeed: number; name: string; sound: boolean; autoNext: boolean }
   bankroll: number
   drills: Partial<Record<DrillType, DrillProgress>>
   lessonsRead: string[]
@@ -31,7 +31,7 @@ export interface Store {
 
 const KEY = 'poker-trainer-v1'
 const DEFAULT: Store = {
-  hands: [], tournaments: [], settings: { coach: true, botSpeed: 1, name: 'Toi', sound: true }, bankroll: 10000,
+  hands: [], tournaments: [], settings: { coach: true, botSpeed: 1, name: 'Toi', sound: true, autoNext: true }, bankroll: 10000,
   drills: {}, lessonsRead: [], streak: { count: 0, lastDay: '' }, xp: 0, sessions: [], journal: [], puzzles: { solved: 0, asked: 0, best: 0, streak: 0 }, weekly: {}, reads: { right: 0, total: 0 }, claimed: [],
 }
 

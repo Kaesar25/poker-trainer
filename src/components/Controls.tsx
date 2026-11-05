@@ -10,15 +10,32 @@ interface Props {
   heroIdx: number
   advice: Advice | null
   over: boolean
+  autoNextMs?: number | null
 }
 
-export function Controls({ state: s, onAction, onNext, heroIdx, advice, over }: Props) {
+type Pre = 'checkfold' | 'check' | 'callany' | null
+
+export function Controls({ state: s, onAction, onNext, heroIdx, advice, over, autoNextMs }: Props) {
+  const [pre, setPre] = useState<Pre>(null)
   const heroTurn = s.acting === heroIdx && s.street !== 'showdown' && s.street !== 'idle'
   const la = heroTurn ? legalActions(s, heroIdx) : null
   const [raiseTo, setRaiseTo] = useState(0)
   const [sheet, setSheet] = useState(false)
   const phone = useIsPhone()
   const pot = totalPot(s)
+
+  // pre-actions: reset when a new street or hand starts, or when someone bets into a "check" pre-action
+  useEffect(() => { setPre(null) }, [s.handNumber])
+  useEffect(() => { setPre((p) => (p === 'check' && s.currentBet > s.players[heroIdx].bet ? null : p)) }, [s.currentBet])
+  useEffect(() => {
+    if (!heroTurn || !la || !pre) return
+    const p = pre
+    setPre(null)
+    if (p === 'checkfold') onAction(la.canCheck ? { type: 'check' } : { type: 'fold' })
+    else if (p === 'check' && la.canCheck) onAction({ type: 'check' })
+    else if (p === 'callany') onAction(la.canCheck ? { type: 'check' } : { type: 'call' })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [heroTurn, s.acting, s.street])
 
   useEffect(() => {
     setSheet(false)
@@ -33,6 +50,7 @@ export function Controls({ state: s, onAction, onNext, heroIdx, advice, over }: 
         <div className="row">
           <button className="btn next" onClick={onNext} disabled={alive < 2 || over}>
             {alive < 2 || over ? 'Terminé' : 'Main suivante →'}
+            {autoNextMs && !over && alive >= 2 ? <span className="autobar" key={s.handNumber} style={{ animationDuration: `${autoNextMs}ms` }} /> : null}
           </button>
         </div>
       </div>
@@ -40,9 +58,20 @@ export function Controls({ state: s, onAction, onNext, heroIdx, advice, over }: 
   }
 
   if (!heroTurn || !la) {
+    const me = s.players[heroIdx]
+    const inHand = !me.folded && !me.out && !me.allIn
+    const facing = s.currentBet > me.bet
+    const preBtn = (k: Exclude<Pre, null>, label: string) => <button className={'prebtn' + (pre === k ? ' on' : '')} onClick={() => setPre(pre === k ? null : k)}><i />{label}</button>
     return (
       <div className="controls waiting">
         <div className="thinking">{s.players[s.acting]?.name} réfléchit <span className="dots"><span /><span /><span /></span></div>
+        {inHand && (
+          <div className="pre-row">
+            {preBtn('checkfold', facing ? 'Fold' : 'Check / Fold')}
+            {!facing && preBtn('check', 'Check')}
+            {preBtn('callany', facing ? `Suivre ${Math.min(me.stack, s.currentBet - me.bet)}` : 'Suivre tout')}
+          </div>
+        )}
         {!phone && (
           <div className="row">
             <button className="btn fold" disabled>Fold</button>

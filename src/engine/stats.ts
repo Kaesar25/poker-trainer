@@ -1,4 +1,5 @@
 import type { Card } from './cards'
+import { evaluate } from './evaluator'
 import type { ActionRecord, GameState, Street } from './game'
 import type { Position } from './coach'
 
@@ -48,7 +49,7 @@ export function buildRecord(before: GameState, after: GameState, heroId: number,
   }
 }
 
-export interface HeroModel { foldToBet: number; callDown: number; samples: number }
+export interface HeroModel { foldToBet: number; callDown: number; samples: number; bluffsCaught: number }
 
 /** How the hero reacts when facing a postflop bet (used by adaptive bots and leak detection). */
 export function heroModel(records: HandRecord[], heroId: number): HeroModel {
@@ -69,8 +70,16 @@ export function heroModel(records: HandRecord[], heroId: number): HeroModel {
       }
     }
   }
+  // showdowns where the hero was the river aggressor with a weak hand and lost: "caught bluffing"
+  let bluffsCaught = 0
+  for (const r of records.slice(-120)) {
+    if (!r.showdown || r.heroWon || r.board.length < 5) continue
+    const riverAgg = r.actions.some((a) => a.playerId === heroId && a.street === 'river' && (a.action === 'bet' || a.action === 'raise' || a.action === 'allin'))
+    if (!riverAgg) continue
+    if (evaluate([...r.heroCards, ...r.board]).category <= 1) bluffsCaught++
+  }
   const n = fold + call + raise
-  return { foldToBet: n ? fold / n : 0.5, callDown: n ? call / n : 0.4, samples: n }
+  return { foldToBet: n ? fold / n : 0.5, callDown: n ? call / n : 0.4, samples: n, bluffsCaught }
 }
 
 export interface Stats {

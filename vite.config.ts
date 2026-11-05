@@ -25,5 +25,5 @@ export default defineConfig({
       },
     }),
   ],
-  test: { environment: 'node' },
+  test: { environment: 'node', exclude: ['bench/**', 'node_modules/**'] },
 } as any)

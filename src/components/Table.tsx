@@ -74,6 +74,17 @@ export function Table({ state: s, heroIdx, showLog, tournament, compact, childre
   const slot = (i: number) => (phonePortrait ? slotOf.get(i) ?? -1 : (i - heroIdx + n) % n)
   const seatPos = useCallback((i: number): [number, number] => layout[slot(i)] ?? [50, 50], [layout, heroIdx, n, nv])
   const pot = totalPot(s)
+  // last action of each player on the current street (shown as a bubble on the seat)
+  const lastAct = new Map<number, string>()
+  if (s.street !== 'idle') {
+    const LBL: Record<string, string> = { fold: 'Fold', check: 'Check', call: 'Suit', bet: 'Mise', raise: 'Relance', allin: 'Tapis' }
+    for (const a of s.history) {
+      if (a.action === 'sb' || a.action === 'bb' || a.action === 'ante') continue
+      if (a.action === 'fold') { lastAct.set(a.playerId, 'Fold'); continue }
+      if (a.street !== s.street && s.street !== 'showdown') continue
+      lastAct.set(a.playerId, LBL[a.action] + (a.action === 'bet' || a.action === 'raise' ? ` ${a.amount}` : ''))
+    }
+  }
   const winners = s.result?.winners ?? []
   const winBy = (id: number) => winners.filter((w) => w.playerId === id).reduce((a, w) => a + w.amount, 0)
   const hero = s.players[heroIdx]
@@ -121,6 +132,7 @@ export function Table({ state: s, heroIdx, showLog, tournament, compact, childre
               coverage={coverage}
               position={s.street !== 'idle' && !p.out ? positionOf(s, i) : undefined}
               compactSeat={phonePortrait}
+              lastAction={s.street === 'showdown' ? undefined : lastAct.get(p.id)}
               note={notes && noteLabel ? noteLabel(notes[p.id]?.tag, notes[p.id]?.text) : undefined}
               onClick={onSeatClick && p.isBot && !p.out ? () => onSeatClick(p.id) : undefined}
             />

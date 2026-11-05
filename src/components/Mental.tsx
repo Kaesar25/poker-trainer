@@ -1,3 +1,6 @@
+import { cardToString } from '../engine/cards'
+import type { KeyHand } from '../engine/keyhands'
+import type { HandRecord } from '../engine/stats'
 import { useEffect, useState } from 'react'
 import type { GameState } from '../engine/game'
 import type { Session } from '../hooks/useSession'
@@ -81,7 +84,7 @@ export function PauseOverlay({ reason, state, heroIdx, onResume }: { reason: Ses
 }
 
 /* ---------- Journal ---------- */
-export function JournalModal({ mode, minutes, place, net, checkin, onSave, onSkip }: { mode: string; minutes: number; place: number | null; net: number; checkin: CheckIn | null; onSave: (e: Omit<JournalEntry, 'ts'>) => void; onSkip: () => void }) {
+export function JournalModal({ mode, minutes, place, net, checkin, onSave, onSkip, keys, onReplay }: { mode: string; minutes: number; place: number | null; net: number; checkin: CheckIn | null; onSave: (e: Omit<JournalEntry, 'ts'>) => void; onSkip: () => void; keys?: KeyHand[]; onReplay?: (h: HandRecord) => void }) {
   const [good, setGood] = useState('')
   const [mistake, setMistake] = useState('')
   const [mental, setMental] = useState('')
@@ -89,6 +92,18 @@ export function JournalModal({ mode, minutes, place, net, checkin, onSave, onSki
     <div className="overlay">
       <div className="modal journal">
         <div className="hint">Journal de session · {minutes} min{place ? ` · ${place}e place` : ''}</div>
+        {keys && keys.length > 0 && (
+          <div className="keyhands">
+            <div className="kh-title">Mains clés à revoir</div>
+            {keys.map((k) => (
+              <button key={k.rec.id} className={'kh-row ' + k.tone} disabled={!k.rec.start || !onReplay} onClick={() => onReplay?.(k.rec)}>
+                <span className="kh-cards">{k.rec.heroCards.map(cardToString).join(' ')}</span>
+                <span className="kh-txt"><b>Main n°{k.rec.handNumber} · {k.rec.position}</b><small>{k.reason}</small></span>
+                {k.rec.start && onReplay ? <span className="kh-go">▶</span> : null}
+              </button>
+            ))}
+          </div>
+        )}
         <h2>Trois questions avant de partir</h2>
         <label className="jl">Ce que tu as bien fait<textarea className="ta" value={good} onChange={(e) => setGood(e.target.value)} placeholder="Ex. : j'ai gardé les pots petits contre Léo qui me couvrait." /></label>
         <label className="jl">Ta plus grosse erreur<textarea className="ta" value={mistake} onChange={(e) => setMistake(e.target.value)} placeholder="Ex. : call river avec top paire face au chip leader." /></label>

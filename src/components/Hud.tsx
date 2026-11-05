@@ -10,8 +10,8 @@ function fmt(ms: number) {
   return h ? `${h}h${String(m).padStart(2, '0')}` : `${m}:${String(s % 60).padStart(2, '0')}`
 }
 
-export function Hud({ state: s, tournament: t, mode, heroIdx, showLog, onToggleLog, coach, onToggleCoach, onQuit, playedMs, onPause, events, sound, onToggleSound }: {
-  state: GameState; tournament: Tournament | null; mode: string; heroIdx: number; showLog: boolean; onToggleLog: () => void; coach: boolean; onToggleCoach: () => void; onQuit: () => void; playedMs: number; onPause: () => void; events?: { t: number; text: string }[]; sound?: boolean; onToggleSound?: () => void
+export function Hud({ state: s, tournament: t, mode, heroIdx, showLog, onToggleLog, coach, onToggleCoach, onQuit, playedMs, onPause, events, sound, onToggleSound, autoNext, onToggleAutoNext }: {
+  state: GameState; tournament: Tournament | null; mode: string; heroIdx: number; showLog: boolean; onToggleLog: () => void; coach: boolean; onToggleCoach: () => void; onQuit: () => void; playedMs: number; onPause: () => void; events?: { t: number; text: string }[]; sound?: boolean; onToggleSound?: () => void; autoNext?: boolean; onToggleAutoNext?: () => void
 }) {
   const [, tick] = useState(0)
   const [menu, setMenu] = useState(false)
@@ -42,6 +42,7 @@ export function Hud({ state: s, tournament: t, mode, heroIdx, showLog, onToggleL
         <button className={'sheet-item' + (coach ? ' on' : '')} onClick={() => { onToggleCoach(); setMenu(false) }}><span>◆</span>Coach en direct<b>{coach ? 'activé' : 'désactivé'}</b></button>
         {mode !== 'cash' && <button className="sheet-item" onClick={() => { onPause(); setMenu(false) }}><span>❚❚</span>Pause guidée</button>}
         {onToggleSound && <button className={'sheet-item' + (sound ? ' on' : '')} onClick={() => { onToggleSound(); setMenu(false) }}><span>{sound ? '🔊' : '🔇'}</span>Son<b>{sound ? 'activé' : 'coupé'}</b></button>}
+        {onToggleAutoNext && <button className={'sheet-item' + (autoNext ? ' on' : '')} onClick={() => { onToggleAutoNext(); setMenu(false) }}><span>⏭</span>Main suivante auto<b>{autoNext ? 'activée' : 'manuelle'}</b></button>}
         <button className={'sheet-item' + (showLog ? ' on' : '')} onClick={() => { onToggleLog(); setMenu(false) }}><span>☰</span>Journal des coups<b>{showLog ? 'affiché' : 'masqué'}</b></button>
         <button className="sheet-item danger" onClick={() => { setMenu(false); onQuit() }}><span>✕</span>Quitter la table</button>
       </div>
