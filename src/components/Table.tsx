@@ -6,6 +6,7 @@ import { CardView } from './CardView'
 import { Chips } from './Chips'
 import { Seat } from './Seat'
 import { TableFx } from './Fx'
+import { useIsPhone } from '../hooks/useMedia'
 
 const LAYOUTS: Record<number, [number, number][]> = {
   2: [[50, 84], [50, 16]],
@@ -49,7 +50,20 @@ interface Props {
 export function Table({ state: s, heroIdx, showLog, tournament, compact, children }: Props) {
   const n = s.players.length
   const portrait = usePortrait()
-  const layout = (portrait ? PORTRAIT : LAYOUTS)[Math.min(8, Math.max(2, n))] ?? LAYOUTS[6]
+  const phone = useIsPhone()
+  const phonePortrait = phone && portrait
+  const baseLayout = (portrait ? PORTRAIT : LAYOUTS)[Math.min(8, Math.max(2, n))] ?? LAYOUTS[6]
+  // Phone portrait: seats sit on the rail of a tall oval, evenly spaced, hero at the bottom.
+  const layout: [number, number][] = phonePortrait
+    ? Array.from({ length: n }, (_, k) => {
+        if (k === 0) return [50, 97] as [number, number]
+        // opponents spread over the oval, leaving a gap at the bottom for the hero strip
+        const gap = (70 * Math.PI) / 180
+        const span = 2 * Math.PI - gap
+        const a = Math.PI / 2 + gap / 2 + (n === 2 ? span / 2 : ((k - 1) * span) / (n - 2))
+        return [50 + 42 * Math.cos(a), 50 + 44 * Math.sin(a)] as [number, number]
+      })
+    : baseLayout
   const seatPos = useCallback((i: number): [number, number] => layout[(i - heroIdx + n) % n] ?? [50, 50], [layout, heroIdx, n])
   const pot = totalPot(s)
   const winners = s.result?.winners ?? []
@@ -64,7 +78,7 @@ export function Table({ state: s, heroIdx, showLog, tournament, compact, childre
   }, [pot])
 
   return (
-    <div className={'table-wrap' + (compact ? ' compact' : '')}>
+    <div className={'table-wrap' + (compact ? ' compact' : '') + (phonePortrait ? ' phone' : '')}>
       <div className="table">
         <div className="felt-light" />
         <div className="logo">POKER TRAINER</div>
@@ -80,6 +94,7 @@ export function Table({ state: s, heroIdx, showLog, tournament, compact, childre
         {s.players.map((p, i) => {
           const rel = (i - heroIdx + n) % n
           const [x, y] = layout[rel]
+          if (phonePortrait && i === heroIdx) return null
           const coverage = tournament && !p.out && i !== heroIdx && !hero.out ? (p.stack + p.bet > hero.stack + hero.bet ? 'covers' : 'covered') : null
           return (
             <Seat
@@ -96,6 +111,7 @@ export function Table({ state: s, heroIdx, showLog, tournament, compact, childre
               description={s.result?.descriptions[p.id]}
               coverage={coverage}
               position={s.street !== 'idle' && !p.out ? positionOf(s, i) : undefined}
+              compactSeat={phonePortrait}
             />
           )
         })}
@@ -103,13 +119,30 @@ export function Table({ state: s, heroIdx, showLog, tournament, compact, childre
           if (p.bet <= 0) return null
           const rel = (i - heroIdx + n) % n
           const [x, y] = layout[rel]
-          const cx = x + (50 - x) * (portrait ? 0.5 : 0.42)
-          const cy = y + (50 - y) * (portrait ? 0.42 : 0.45)
+          const cx = phonePortrait && i === heroIdx ? 50 : x + (50 - x) * (phonePortrait ? 0.38 : portrait ? 0.5 : 0.42)
+          const cy = phonePortrait && i === heroIdx ? 82 : y + (50 - y) * (phonePortrait ? 0.36 : portrait ? 0.42 : 0.45)
           return <Chips key={`c${p.id}-${p.bet}`} amount={p.bet} x={cx} y={cy} />
         })}
         {!compact && <TableFx state={s} seatPos={seatPos} heroIdx={heroIdx} />}
         {children}
       </div>
+      {phonePortrait && (
+        <Seat
+          player={hero}
+          x={50}
+          y={50}
+          isHero
+          isDealer={s.dealer === heroIdx}
+          isActing={s.acting === heroIdx}
+          handNumber={s.handNumber}
+          bb={s.blinds.bb}
+          winAmount={winBy(hero.id) || undefined}
+          description={s.result?.descriptions[hero.id]}
+          position={s.street !== 'idle' && !hero.out ? positionOf(s, heroIdx) : undefined}
+          compactSeat
+          strip
+        />
+      )}
     </div>
   )
 }

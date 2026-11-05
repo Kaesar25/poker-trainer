@@ -1,8 +1,26 @@
+import { useState } from 'react'
 import type { Advice } from '../engine/coach'
+import { useIsPhone } from '../hooks/useMedia'
 
 export function CoachPanel({ advice, position }: { advice: Advice; position: string }) {
+  const phone = useIsPhone()
+  const [open, setOpen] = useState(false)
   const pct = (x: number) => Math.round(x * 100)
   const eqColor = advice.equity >= 0.6 ? 'var(--green)' : advice.equity >= 0.4 ? 'var(--gold)' : 'var(--red)'
+  if (phone) {
+    return (
+      <button className={'coach mini' + (open ? ' open' : '')} onClick={() => setOpen((v) => !v)}>
+        <div className="cm-row">
+          <span style={{ color: 'var(--gold)' }}>◆</span>
+          <span className={'advice ' + advice.action}>{advice.title}</span>
+          <span className="cm-pill" style={{ color: eqColor }}>{pct(advice.equity)} %</span>
+          {advice.potOdds > 0 && <span className="cm-pill">cote {pct(advice.potOdds)} %</span>}
+          <span className="cm-more">{open ? '▴' : 'pourquoi ▾'}</span>
+        </div>
+        {open && <div className="why">{advice.reason}</div>}
+      </button>
+    )
+  }
   return (
     <div className="coach">
       <div className="head">
