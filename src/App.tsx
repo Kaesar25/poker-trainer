@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { HERO, PAUSE_EVERY_MS, playedMs, useSession, type Mode } from './hooks/useSession'
+import { HERO, PAUSE_EVERY_MS, TAG_LABEL, noteIsRight, playedMs, useSession, type Mode } from './hooks/useSession'
 import { advise, positionOf } from './engine/coach'
 import { isHandOver } from './engine/game'
 import { computeStats } from './engine/stats'
@@ -15,18 +15,27 @@ import { Training } from './components/Training'
 import { Learn } from './components/Learn'
 import { Drill } from './components/Drill'
 import { JournalModal, PauseOverlay, detectAlerts } from './components/Mental'
-import { dailySession, DRILL_META, type DrillType, type Question } from './engine/drills'
+import { dailySession, proSession, DRILL_META, type DrillType, type Question } from './engine/drills'
+import type { HandRecord } from './engine/stats'
+import { Replay } from './components/Replay'
+import { Leaks } from './components/Leaks'
+import { IcmTool } from './components/IcmTool'
+import { Challenges } from './components/Challenges'
+import { NoteSheet } from './components/NoteSheet'
 import { recordAnswer, recordPuzzle, type SessionSummary } from './store'
 import { HandBar } from './components/HandBar'
 import { PuzzleScreen } from './components/Puzzle'
 import { PERSONALITIES } from './engine/bots'
 import { haptic, setSoundEnabled } from './fx/sound'
 
-type Screen = 'home' | 'setup' | 'history' | 'stats' | 'training' | 'learn' | 'drill' | 'drill-result' | 'journal' | 'puzzle'
+type Screen = 'home' | 'setup' | 'history' | 'stats' | 'training' | 'learn' | 'drill' | 'drill-result' | 'journal' | 'puzzle' | 'replay' | 'leaks' | 'icm' | 'challenges'
 
 export default function App() {
-  const { store, updateStore, session, saved, start, resumeSaved, discardSaved, leaveForLater, act, nextHand, quit, setPaused, doReenter } = useSession()
+  const { store, updateStore, session, saved, setNote, start, resumeSaved, discardSaved, leaveForLater, act, nextHand, quit, setPaused, doReenter } = useSession()
   const [quitMenu, setQuitMenu] = useState(false)
+  const [replayHand, setReplayHand] = useState<HandRecord | null>(null)
+  const [noteFor, setNoteFor] = useState<number | null>(null)
+  const [challengesBack, setChallengesBack] = useState<Screen>('home')
   const [screen, setScreen] = useState<Screen>('home')
   const [mode, setMode] = useState<Mode>('cash')
   const [showLog, setShowLog] = useState(false)
@@ -39,6 +48,7 @@ export default function App() {
   useEffect(() => { setSoundEnabled(store.settings.sound !== false) }, [store.settings.sound])
   const setCoach = (v: boolean) => updateStore((s) => ({ ...s, settings: { ...s.settings, coach: v } }))
   const startDrill = (t: DrillType, back: Screen = 'training') => { setDrill({ questions: null, type: t, title: DRILL_META[t].name, back }); setScreen('drill') }
+  const startPro = () => { setDrill({ questions: proSession(), title: 'Spots de pros', back: 'training' }); setScreen('drill') }
   const startDaily = () => { setDrill({ questions: dailySession(), title: 'Séance du jour', back: 'training' }); setScreen('drill') }
 
   const s = session?.state
@@ -76,9 +86,13 @@ export default function App() {
         onSkip={() => { setJournalFor(null); setScreen('home') }} /></div>
     }
     if (screen === 'setup') return <div className="app"><Setup mode={mode} onStart={(c) => { start(c); setScreen('home'); setDismissedAlert(null) }} onBack={() => setScreen('home')} coach={coach} setCoach={setCoach} /></div>
-    if (screen === 'history') return <div className="app"><History hands={store.hands} journal={store.journal} onBack={() => setScreen('home')} /></div>
+    if (screen === 'history') return <div className="app"><History hands={store.hands} journal={store.journal} onBack={() => setScreen('home')} onReplay={(h) => { setReplayHand(h); setScreen('replay') }} /></div>
+    if (screen === 'replay' && replayHand) return <div className="app"><Replay hand={replayHand} onBack={() => setScreen('history')} /></div>
+    if (screen === 'leaks') return <div className="app"><Leaks store={store} onDrill={(t) => startDrill(t, 'leaks')} onBack={() => setScreen('training')} /></div>
+    if (screen === 'icm') return <div className="app"><IcmTool onBack={() => setScreen('training')} /></div>
+    if (screen === 'challenges') return <div className="app"><Challenges store={store} onBack={() => setScreen(challengesBack)} onClaim={(key, xp) => updateStore((st) => (st.claimed.includes(key) ? st : { ...st, claimed: [...st.claimed, key].slice(-60), xp: st.xp + xp }))} /></div>
     if (screen === 'stats') return <div className="app"><StatsScreen store={store} onBack={() => setScreen('home')} /></div>
-    if (screen === 'training') return <div className="app"><Training store={store} onDaily={startDaily} onDrill={(t) => startDrill(t)} onLearn={() => setScreen('learn')} onBack={() => setScreen('home')} onMarathon={() => { setMode('marathon'); setScreen('setup') }} onPuzzle={() => setScreen('puzzle')} /></div>
+    if (screen === 'training') return <div className="app"><Training store={store} onDaily={startDaily} onDrill={(t) => startDrill(t)} onLearn={() => setScreen('learn')} onBack={() => setScreen('home')} onMarathon={() => { setMode('marathon'); setScreen('setup') }} onPuzzle={() => setScreen('puzzle')} onPro={startPro} onLeaks={() => setScreen('leaks')} onIcm={() => setScreen('icm')} onChallenges={() => { setChallengesBack('training'); setScreen('challenges') }} /></div>
     if (screen === 'puzzle') return <div className="app"><PuzzleScreen store={store} onResult={(ok) => updateStore((st) => recordPuzzle(st, ok))} onBack={() => setScreen('training')} /></div>
     if (screen === 'learn') return <div className="app"><Learn store={store} onRead={(id) => updateStore((st) => st.lessonsRead.includes(id) ? st : { ...st, lessonsRead: [...st.lessonsRead, id], xp: st.xp + 30 })} onDrill={(t) => startDrill(t, 'learn')} onBack={() => setScreen('training')} /></div>
     if (screen === 'drill') return <div className="app"><Drill key={drill.title + (drill.type ?? '')} questions={drill.questions} type={drill.type} title={drill.title} onAnswer={(t, ok, ms) => updateStore((st) => recordAnswer(st, t, ok, ms))} onExit={(sum) => { setDrillResult(sum); setScreen(sum.asked > 0 ? 'drill-result' : drill.back) }} /></div>
@@ -97,7 +111,7 @@ export default function App() {
       )
     }
     const savedInfo = saved ? { mode: saved.mode, hands: saved.records.length, minutes: Math.round(saved.playedMs / 60000), stack: saved.state.players[HERO].stack, bb: saved.state.blinds.bb } : null
-    return <div className="app"><Home store={store} tab="home" onPick={(m) => { setMode(m); setScreen('setup') }} onNav={(t) => setScreen(t)} onTrain={() => setScreen('training')} saved={savedInfo} onResume={resumeSaved} onDiscard={discardSaved} /></div>
+    return <div className="app"><Home store={store} tab="home" onPick={(m) => { setMode(m); setScreen('setup') }} onNav={(t) => setScreen(t)} onTrain={() => setScreen('training')} saved={savedInfo} onResume={resumeSaved} onDiscard={discardSaved} onChallenges={() => { setChallengesBack('home'); setScreen('challenges') }} /></div>
   }
 
   const st = session.state
@@ -110,7 +124,8 @@ export default function App() {
     <div className="app">
       <div className="game">
         <Hud state={st} tournament={session.tournament} mode={session.mode} heroIdx={HERO} showLog={showLog} onToggleLog={() => setShowLog((v) => !v)} coach={coach} onToggleCoach={() => setCoach(!coach)} onQuit={() => setQuitMenu(true)} playedMs={played} onPause={() => setPaused(true, 'manual')} events={session.events} sound={store.settings.sound !== false} onToggleSound={() => updateStore((st) => ({ ...st, settings: { ...st.settings, sound: !(st.settings.sound !== false) } }))} />
-        <Table state={st} heroIdx={HERO} showLog={showLog} tournament={!!session.tournament} />
+        <Table state={st} heroIdx={HERO} showLog={showLog} tournament={!!session.tournament} notes={session.notes} noteLabel={(tag, text) => (tag ? TAG_LABEL[tag as keyof typeof TAG_LABEL] : text ? '📝' : undefined)} onSeatClick={(id) => setNoteFor(id)} />
+        {noteFor !== null && (() => { const p = st.players.find((x) => x.id === noteFor); return p ? <NoteSheet name={p.name} note={session.notes[noteFor]} onSave={(n) => setNote(noteFor, n)} onClose={() => setNoteFor(null)} /> : null })()}
         {session.paused && !session.over && <PauseOverlay reason={session.pauseReason} state={st} heroIdx={HERO} onResume={() => setPaused(false)} />}
         {session.over && (
           <div className="overlay">
@@ -128,7 +143,11 @@ export default function App() {
               <button className={session.canReenter ? 'ghost' : 'primary'} onClick={endSession}>{session.canReenter ? 'Non, j\'arrête là' : 'Continuer'}</button>
               <div className="reveal">
                 <div className="l" style={{ marginBottom: 6 }}>Qui étaient tes adversaires</div>
-                {st.players.filter((p) => p.isBot).slice(0, 8).map((p) => <div key={p.id} className="reveal-row"><b>{p.name}</b> · {PERSONALITIES[p.profile!].label} — <span>{PERSONALITIES[p.profile!].tell}</span></div>)}
+                {st.players.filter((p) => p.isBot).slice(0, 8).map((p) => {
+                  const n = session.notes[p.id]
+                  const r = noteIsRight(n?.tag, p.profile)
+                  return <div key={p.id} className="reveal-row"><b>{p.name}</b> · {PERSONALITIES[p.profile!].label}{n?.tag ? <em className={r ? 'ok' : 'ko'}> · ta lecture : {TAG_LABEL[n.tag]} {r ? '✓' : '✗'}</em> : null} — <span>{PERSONALITIES[p.profile!].tell}</span></div>
+                })}
               </div>
             </div>
           </div>

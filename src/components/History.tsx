@@ -6,7 +6,7 @@ import { CardView } from './CardView'
 const MODE: Record<string, string> = { cash: 'Cash', sng: 'SNG', chipleader: 'Chip leader' }
 const ACT: Record<string, string> = { fold: 'fold', check: 'check', call: 'call', bet: 'mise', raise: 'relance', allin: 'tapis', sb: 'SB', bb: 'BB', ante: 'ante' }
 
-export function History({ hands, journal, onBack }: { hands: HandRecord[]; journal: JournalEntry[]; onBack: () => void }) {
+export function History({ hands, journal, onBack, onReplay }: { hands: HandRecord[]; journal: JournalEntry[]; onBack: () => void; onReplay: (h: HandRecord) => void }) {
   const [open, setOpen] = useState<string | null>(null)
   const [tab, setTab] = useState<'hands' | 'journal'>('hands')
   const list = hands.slice().reverse()
@@ -30,11 +30,13 @@ export function History({ hands, journal, onBack }: { hands: HandRecord[]; journ
         return (
           <div className="hand" key={h.id} onClick={() => setOpen(open === h.id ? null : h.id)}>
             <div className="top">
+              {h.start && <span className="replay-dot" title="Rejouable">▶</span>}
               <div className="mini">{h.heroCards.map((c, i) => <CardView key={i} card={c} />)}</div>
               <div className="mini">{h.board.map((c, i) => <CardView key={i} card={c} />)}</div>
               <div className={'delta ' + (h.heroDelta >= 0 ? 'pos' : 'neg')}>{h.heroDelta >= 0 ? '+' : ''}{h.heroDelta}</div>
             </div>
             <div className="sub">{MODE[h.mode]} · {h.position} · blinds {h.blinds.sb}/{h.blinds.bb} · {h.showdown ? 'abattage' : 'sans abattage'} · {h.winners.map((w) => `${w.name}${w.hand ? ` (${w.hand})` : ''}`).join(', ')}</div>
+            {open === h.id && h.start && <button className="primary replay-btn" onClick={(e) => { e.stopPropagation(); onReplay(h) }}>▶ Revoir la main pas à pas</button>}
             {open === h.id && (
               <div className="detail">
                 {(['preflop', 'flop', 'turn', 'river'] as const).map((st) => {

@@ -45,26 +45,34 @@ interface Props {
   tournament: boolean
   compact?: boolean
   children?: React.ReactNode
+  notes?: Record<number, { tag?: string; text?: string }>
+  noteLabel?: (tag?: string, text?: string) => string | undefined
+  onSeatClick?: (playerId: number) => void
 }
 
-export function Table({ state: s, heroIdx, showLog, tournament, compact, children }: Props) {
+export function Table({ state: s, heroIdx, showLog, tournament, compact, children, notes, noteLabel, onSeatClick }: Props) {
   const n = s.players.length
   const portrait = usePortrait()
   const phone = useIsPhone()
   const phonePortrait = phone && portrait
   const baseLayout = (portrait ? PORTRAIT : LAYOUTS)[Math.min(8, Math.max(2, n))] ?? LAYOUTS[6]
   // Phone portrait: seats sit on the rail of a tall oval, evenly spaced, hero at the bottom.
+  // phone: busted opponents are hidden and the remaining ones are spread around the oval
+  const order = Array.from({ length: n }, (_, k) => (heroIdx + k) % n).filter((i) => !phonePortrait || i === heroIdx || !s.players[i].out)
+  const slotOf = new Map(order.map((i, k) => [i, k]))
+  const nv = order.length
   const layout: [number, number][] = phonePortrait
-    ? Array.from({ length: n }, (_, k) => {
+    ? Array.from({ length: nv }, (_, k) => {
         if (k === 0) return [50, 97] as [number, number]
         // opponents spread over the oval, leaving a gap at the bottom for the hero strip
         const gap = (70 * Math.PI) / 180
         const span = 2 * Math.PI - gap
-        const a = Math.PI / 2 + gap / 2 + (n === 2 ? span / 2 : ((k - 1) * span) / (n - 2))
+        const a = Math.PI / 2 + gap / 2 + (nv === 2 ? span / 2 : ((k - 1) * span) / (nv - 2))
         return [50 + 42 * Math.cos(a), 50 + 44 * Math.sin(a)] as [number, number]
       })
     : baseLayout
-  const seatPos = useCallback((i: number): [number, number] => layout[(i - heroIdx + n) % n] ?? [50, 50], [layout, heroIdx, n])
+  const slot = (i: number) => (phonePortrait ? slotOf.get(i) ?? -1 : (i - heroIdx + n) % n)
+  const seatPos = useCallback((i: number): [number, number] => layout[slot(i)] ?? [50, 50], [layout, heroIdx, n, nv])
   const pot = totalPot(s)
   const winners = s.result?.winners ?? []
   const winBy = (id: number) => winners.filter((w) => w.playerId === id).reduce((a, w) => a + w.amount, 0)
@@ -92,7 +100,8 @@ export function Table({ state: s, heroIdx, showLog, tournament, compact, childre
           </div>
         </div>
         {s.players.map((p, i) => {
-          const rel = (i - heroIdx + n) % n
+          const rel = slot(i)
+          if (rel < 0) return null
           const [x, y] = layout[rel]
           if (phonePortrait && i === heroIdx) return null
           const coverage = tournament && !p.out && i !== heroIdx && !hero.out ? (p.stack + p.bet > hero.stack + hero.bet ? 'covers' : 'covered') : null
@@ -112,12 +121,15 @@ export function Table({ state: s, heroIdx, showLog, tournament, compact, childre
               coverage={coverage}
               position={s.street !== 'idle' && !p.out ? positionOf(s, i) : undefined}
               compactSeat={phonePortrait}
+              note={notes && noteLabel ? noteLabel(notes[p.id]?.tag, notes[p.id]?.text) : undefined}
+              onClick={onSeatClick && p.isBot && !p.out ? () => onSeatClick(p.id) : undefined}
             />
           )
         })}
         {s.players.map((p, i) => {
           if (p.bet <= 0) return null
-          const rel = (i - heroIdx + n) % n
+          const rel = slot(i)
+          if (rel < 0) return null
           const [x, y] = layout[rel]
           const cx = phonePortrait && i === heroIdx ? 50 : x + (50 - x) * (phonePortrait ? 0.38 : portrait ? 0.5 : 0.42)
           const cy = phonePortrait && i === heroIdx ? 82 : y + (50 - y) * (phonePortrait ? 0.36 : portrait ? 0.42 : 0.45)

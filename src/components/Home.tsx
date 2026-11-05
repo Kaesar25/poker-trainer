@@ -2,8 +2,11 @@ import type { Store } from '../store'
 import type { Mode } from '../hooks/useSession'
 import { computeStats } from '../engine/stats'
 import { levelFor } from '../store'
+import { weeklyChallenges } from '../engine/challenges'
 
-export function Home({ store, onPick, onNav, onTrain, tab, saved, onResume, onDiscard }: { store: Store; onPick: (m: Mode) => void; onNav: (t: 'home' | 'history' | 'stats') => void; onTrain: () => void; tab: string; saved: { mode: string; hands: number; minutes: number; stack: number; bb: number } | null; onResume: () => void; onDiscard: () => void }) {
+export function Home({ store, onPick, onNav, onTrain, tab, saved, onResume, onDiscard, onChallenges }: { store: Store; onPick: (m: Mode) => void; onNav: (t: 'home' | 'history' | 'stats') => void; onTrain: () => void; tab: string; saved: { mode: string; hands: number; minutes: number; stack: number; bb: number } | null; onResume: () => void; onDiscard: () => void; onChallenges: () => void }) {
+  const wk = weeklyChallenges(store)
+  const doneCh = wk.list.filter((c) => c.progress >= c.goal).length
   const st = computeStats(store.hands, 0, store.tournaments)
   const lv = levelFor(store.xp)
   const doneToday = store.streak.lastDay === new Date().toISOString().slice(0, 10)
@@ -31,7 +34,7 @@ export function Home({ store, onPick, onNav, onTrain, tab, saved, onResume, onDi
         <div className="resume">
           <div className="resume-l">
             <div className="pill">Partie en cours</div>
-            <h3>{saved.mode === 'cash' ? 'Cash game' : saved.mode === 'sng' ? 'Sit & Go' : saved.mode === 'marathon' ? 'Marathon' : 'Chip leader'} · {saved.hands} main{saved.hands > 1 ? 's' : ''} · {saved.minutes} min</h3>
+            <h3>{saved.mode === 'cash' ? 'Cash game' : saved.mode === 'sng' ? 'Sit & Go' : saved.mode === 'marathon' ? 'Marathon' : saved.mode === 'headsup' ? 'Heads-up' : saved.mode === 'express' ? 'Express' : 'Chip leader'} · {saved.hands} main{saved.hands > 1 ? 's' : ''} · {saved.minutes} min</h3>
             <p>Ton tapis : {saved.stack} ({Math.round(saved.stack / saved.bb)} BB). L'horloge du tournoi est en pause.</p>
           </div>
           <div className="resume-r">
@@ -64,12 +67,29 @@ export function Home({ store, onPick, onNav, onTrain, tab, saved, onResume, onDi
           <h3>Marathon</h3>
           <p>Tournoi de 60 joueurs, structure live, pauses guidées. Pour tenir la distance comme à Malte.</p>
         </button>
+        <button className="mode" onClick={() => onPick('express')}>
+          <span className="pill">10 min</span>
+          <div className="icon">⚡</div>
+          <h3>Express</h3>
+          <p>Mini Sit & Go hyper-turbo à 6. Une partie complète en dix minutes.</p>
+        </button>
+        <button className="mode" onClick={() => onPick('headsup')}>
+          <div className="icon">⚔</div>
+          <h3>Heads-up</h3>
+          <p>Un contre un face à un profil tiré au sort. Lis-le vite, le vainqueur prend tout.</p>
+        </button>
         <button className="mode" onClick={() => onPick('cash')}>
           <div className="icon">♦</div>
           <h3>Cash game</h3>
           <p>Table deep stack, blinds fixes. Travaille ton jeu postflop à ton rythme.</p>
         </button>
       </div>
+      <button className="weekbar" onClick={onChallenges}>
+        <span className="wb-i">🏅</span>
+        <span className="wb-t">Défis de la semaine</span>
+        <span className="wb-dots">{wk.list.map((c) => <i key={c.id} className={c.progress >= c.goal ? 'on' : ''} />)}</span>
+        <span className="wb-n">{doneCh}/3</span>
+      </button>
       <div className="nav">
         <button className={tab === 'home' ? 'on' : ''} onClick={() => onNav('home')}>Jouer</button>
         <button className={tab === 'history' ? 'on' : ''} onClick={() => onNav('history')}>Historique</button>

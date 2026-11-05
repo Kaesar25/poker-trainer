@@ -7,7 +7,9 @@ import { blindsFor, chipLeaderStacks, createTournament, currentLevelIndex, elaps
 import { loadStore, saveStore, type CheckIn, type Decision, type Store, type TournamentResult } from '../store'
 
 export const HERO = 0
-export type Mode = 'cash' | 'sng' | 'chipleader' | 'marathon'
+export type Mode = 'cash' | 'sng' | 'chipleader' | 'marathon' | 'headsup' | 'express'
+export type NoteTag = 'serre' | 'solide' | 'agressif' | 'bluffeur' | 'station' | 'piegeur'
+export interface PlayerNote { tag?: NoteTag; text?: string }
 
 export interface SessionConfig {
   mode: Mode
@@ -39,6 +41,7 @@ export interface Session {
   botsSeated: number
   events: { t: number; text: string }[] // marathon news feed
   canReenter: boolean
+  notes: Record<number, PlayerNote & { name: string; profile?: BotProfile }>
 }
 
 export const PAUSE_EVERY_MS = 60 * 60 * 1000
@@ -95,6 +98,14 @@ export function useSession() {
       tournament = createTournament('sng', cfg.structureId, cfg.players, { buyIn: 100, startStack: cfg.stack, reentryUntilLevel: cfg.reentryUntilLevel ?? 0 })
       blinds = blindsFor(tournament)
       players = [hero(cfg.stack), ...bots(Array(cfg.players - 1).fill(cfg.stack))]
+    } else if (cfg.mode === 'headsup') {
+      tournament = createTournament('headsup', cfg.structureId || 'turbo', 2, { buyIn: 100, startStack: cfg.stack })
+      blinds = blindsFor(tournament)
+      players = [hero(cfg.stack), ...bots([cfg.stack])]
+    } else if (cfg.mode === 'express') {
+      tournament = createTournament('express', 'hyper', cfg.players, { buyIn: 100, startStack: cfg.stack })
+      blinds = blindsFor(tournament)
+      players = [hero(cfg.stack), ...bots(Array(cfg.players - 1).fill(cfg.stack))]
     } else if (cfg.mode === 'marathon') {
       tournament = createTournament('marathon', cfg.structureId, cfg.players, { buyIn: 100, entrants: cfg.entrants ?? 60, startStack: cfg.stack, reentryUntilLevel: cfg.reentryUntilLevel ?? 4 })
       blinds = blindsFor(tournament)
@@ -113,9 +124,18 @@ export function useSession() {
     setSaved(null)
     setSession({
       mode: cfg.mode, config: cfg, state: g, tournament, records: [], decisions: [], over: false, result: null,
-      paused: false, pauseReason: null, lastPauseAtMs: 0, playStartedAt: Date.now(), playedMs: 0, botsSeated: cfg.players - 1, events: [], canReenter: false,
+      paused: false, pauseReason: null, lastPauseAtMs: 0, playStartedAt: Date.now(), playedMs: 0, botsSeated: cfg.players - 1, events: [], canReenter: false, notes: {},
     })
   }, [store.settings.name])
+
+  const setNote = useCallback((playerId: number, note: PlayerNote) => {
+    setSession((sess) => {
+      if (!sess) return sess
+      const p = sess.state.players.find((x) => x.id === playerId)
+      if (!p || !p.isBot) return sess
+      return { ...sess, notes: { ...sess.notes, [playerId]: { ...sess.notes[playerId], ...note, name: p.name, profile: p.profile } } }
+    })
+  }, [])
 
   const resumeSaved = useCallback(() => {
     const s = saved
@@ -124,7 +144,7 @@ export function useSession() {
     beforeRef.current = s.state
     actingSince.current = now
     setSaved(null)
-    setSession({ ...s, paused: false, pauseReason: null, playStartedAt: now, tournament: s.tournament ? resume(s.tournament, now) : null })
+    setSession({ ...s, notes: s.notes ?? {}, paused: false, pauseReason: null, playStartedAt: now, tournament: s.tournament ? resume(s.tournament, now) : null })
   }, [saved])
 
   const discardSaved = useCallback(() => { setSaved(null); try { localStorage.removeItem(SESSION_KEY) } catch { /* ignore */ } }, [])
@@ -132,7 +152,7 @@ export function useSession() {
   const finishHand = useCallback((sess: Session, after: GameState): Session => {
     const before = beforeRef.current ?? after
     const position = positionOf(before, HERO)
-    const rec = buildRecord(before, after, HERO, sess.mode === 'marathon' ? 'sng' : sess.mode, position)
+    const rec = buildRecord(before, after, HERO, sess.mode === 'cash' || sess.mode === 'chipleader' ? sess.mode : 'sng', position)
     let tournament = sess.tournament
     let over = false
     let result: TournamentResult | null = null
@@ -342,6 +362,8 @@ export function useSession() {
       bots: sess.state.players.filter((p) => p.isBot).map((p) => ({ name: p.name, profile: p.profile! })),
     }
     if (sess.records.length >= 5 || minutes >= 5) updateStore((s) => ({ ...s, sessions: [...s.sessions, summary].slice(-200) }))
+    const reads = scoreNotes(sess.notes ?? {})
+    if (reads.total) updateStore((s) => ({ ...s, reads: { right: s.reads.right + reads.right, total: s.reads.total + reads.total }, xp: s.xp + reads.right * 20 }))
     return summary
   }, [session, updateStore])
 
@@ -353,5 +375,26 @@ export function useSession() {
     setSession(null)
   }, [session])
 
-  return { store, updateStore, session, saved, start, resumeSaved, discardSaved, leaveForLater, act, nextHand, quit, setPaused, doReenter, elapsedTournament: session?.tournament ? elapsed(session.tournament) : 0 }
+  return { store, updateStore, session, saved, setNote, start, resumeSaved, discardSaved, leaveForLater, act, nextHand, quit, setPaused, doReenter, elapsedTournament: session?.tournament ? elapsed(session.tournament) : 0 }
+}
+
+const TAG_FITS: Record<NoteTag, BotProfile[]> = {
+  serre: ['nit', 'rock', 'shortstack'],
+  solide: ['tag', 'tilter', 'shortstack'],
+  agressif: ['lag', 'maniac', 'bully', 'tilter'],
+  bluffeur: ['bluffer', 'maniac', 'lag'],
+  station: ['station', 'fish'],
+  piegeur: ['trapper', 'rock'],
+}
+export const TAG_LABEL: Record<NoteTag, string> = { serre: 'Serré', solide: 'Solide', agressif: 'Agressif', bluffeur: 'Bluffeur', station: 'Calling station', piegeur: 'Piégeur' }
+
+export function noteIsRight(tag: NoteTag | undefined, profile: BotProfile | undefined): boolean | null {
+  if (!tag || !profile) return null
+  return TAG_FITS[tag].includes(profile)
+}
+
+export function scoreNotes(notes: Session['notes']): { right: number; total: number } {
+  let right = 0, total = 0
+  for (const n of Object.values(notes)) { const r = noteIsRight(n.tag, n.profile); if (r === null) continue; total++; if (r) right++ }
+  return { right, total }
 }

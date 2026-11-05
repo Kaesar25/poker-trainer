@@ -8,7 +8,7 @@ export interface SessionSummary {
   checkin: CheckIn | null; lucidity: { bucket: number; n: number; errors: number; avgMs: number }[]; decisions: number; errors: number; bots?: { name: string; profile: string }[]
 }
 export interface JournalEntry { ts: number; mode: string; minutes: number; place: number | null; net: number; good: string; mistake: string; mental: string; checkin: CheckIn | null }
-export interface TournamentResult { ts: number; mode: 'sng' | 'chipleader' | 'marathon'; place: number | null; entrants: number; paid: boolean; prize: number; structure: string; checkin?: CheckIn; minutes?: number }
+export interface TournamentResult { ts: number; mode: 'sng' | 'chipleader' | 'marathon' | 'headsup' | 'express'; place: number | null; entrants: number; paid: boolean; prize: number; structure: string; checkin?: CheckIn; minutes?: number }
 
 export interface DrillProgress { asked: number; correct: number; recent: boolean[]; avgMs?: number }
 
@@ -24,12 +24,15 @@ export interface Store {
   sessions: SessionSummary[]
   journal: JournalEntry[]
   puzzles: { solved: number; asked: number; best: number; streak: number }
+  weekly: Record<string, { puzzles: number; drills: number; drillsOk: number }>
+  reads: { right: number; total: number }
+  claimed: string[]
 }
 
 const KEY = 'poker-trainer-v1'
 const DEFAULT: Store = {
   hands: [], tournaments: [], settings: { coach: true, botSpeed: 1, name: 'Toi', sound: true }, bankroll: 10000,
-  drills: {}, lessonsRead: [], streak: { count: 0, lastDay: '' }, xp: 0, sessions: [], journal: [], puzzles: { solved: 0, asked: 0, best: 0, streak: 0 },
+  drills: {}, lessonsRead: [], streak: { count: 0, lastDay: '' }, xp: 0, sessions: [], journal: [], puzzles: { solved: 0, asked: 0, best: 0, streak: 0 }, weekly: {}, reads: { right: 0, total: 0 }, claimed: [],
 }
 
 export function loadStore(): Store {
@@ -37,7 +40,7 @@ export function loadStore(): Store {
     const raw = localStorage.getItem(KEY)
     if (!raw) return DEFAULT
     const s = JSON.parse(raw)
-    return { ...DEFAULT, ...s, settings: { ...DEFAULT.settings, ...(s.settings ?? {}) }, drills: s.drills ?? {}, lessonsRead: s.lessonsRead ?? [], streak: s.streak ?? DEFAULT.streak, xp: s.xp ?? 0, sessions: s.sessions ?? [], journal: s.journal ?? [], puzzles: s.puzzles ?? DEFAULT.puzzles }
+    return { ...DEFAULT, ...s, settings: { ...DEFAULT.settings, ...(s.settings ?? {}) }, drills: s.drills ?? {}, lessonsRead: s.lessonsRead ?? [], streak: s.streak ?? DEFAULT.streak, xp: s.xp ?? 0, sessions: s.sessions ?? [], journal: s.journal ?? [], puzzles: s.puzzles ?? DEFAULT.puzzles, weekly: s.weekly ?? {}, reads: s.reads ?? DEFAULT.reads, claimed: s.claimed ?? [] }
   } catch {
     return DEFAULT
   }
@@ -45,14 +48,34 @@ export function loadStore(): Store {
 
 export function saveStore(s: Store) {
   try {
-    const trimmed = { ...s, hands: s.hands.slice(-500) }
+    const hands = s.hands.slice(-500).map((h, i, arr) => (i < arr.length - 150 && h.start ? { ...h, start: undefined } : h))
+    const trimmed = { ...s, hands }
     localStorage.setItem(KEY, JSON.stringify(trimmed))
   } catch { /* storage unavailable */ }
 }
 
 export const today = () => new Date().toISOString().slice(0, 10)
 
+/** ISO-like week key, e.g. "2026-W45". */
+export function weekKey(ts = Date.now()): string {
+  const d = new Date(ts)
+  const day = (d.getUTCDay() + 6) % 7
+  const thursday = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() - day + 3))
+  const firstThu = new Date(Date.UTC(thursday.getUTCFullYear(), 0, 4))
+  const week = 1 + Math.round(((thursday.getTime() - firstThu.getTime()) / 86400000 - 3 + ((firstThu.getUTCDay() + 6) % 7)) / 7)
+  return `${thursday.getUTCFullYear()}-W${String(week).padStart(2, '0')}`
+}
+
+function bumpWeek(s: Store, f: (w: Store['weekly'][string]) => Store['weekly'][string]): Store['weekly'] {
+  const k = weekKey()
+  const cur = s.weekly[k] ?? { puzzles: 0, drills: 0, drillsOk: 0 }
+  const keys = Object.keys(s.weekly).sort().slice(-12)
+  const kept = Object.fromEntries(keys.map((x) => [x, s.weekly[x]]))
+  return { ...kept, [k]: f(cur) }
+}
+
 export function recordAnswer(s: Store, type: DrillType, ok: boolean, ms?: number): Store {
+  s = { ...s, weekly: bumpWeek(s, (w) => ({ ...w, drills: w.drills + 1, drillsOk: w.drillsOk + (ok ? 1 : 0) })) }
   const d = s.drills[type] ?? { asked: 0, correct: 0, recent: [] }
   const recent = [...d.recent, ok].slice(-50)
   const avgMs = ms !== undefined ? (d.avgMs ? d.avgMs * 0.8 + ms * 0.2 : ms) : d.avgMs
@@ -92,6 +115,7 @@ export function endurance(s: Store): { longest: number; weekMinutes: number; tar
 }
 
 export function recordPuzzle(s: Store, ok: boolean): Store {
+  if (ok) s = { ...s, weekly: bumpWeek(s, (w) => ({ ...w, puzzles: w.puzzles + 1 })) }
   const streak = ok ? s.puzzles.streak + 1 : 0
   return { ...s, puzzles: { solved: s.puzzles.solved + (ok ? 1 : 0), asked: s.puzzles.asked + 1, best: Math.max(s.puzzles.best, streak), streak }, xp: s.xp + (ok ? 15 : 3) }
 }

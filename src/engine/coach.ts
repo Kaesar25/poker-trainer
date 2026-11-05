@@ -34,6 +34,16 @@ export interface Advice {
 }
 
 export function advise(s: GameState, heroIdx: number, rng: () => number = Math.random): Advice | null {
+  const a = adviseRaw(s, heroIdx, rng)
+  if (!a) return a
+  const la = legalActions(s, heroIdx)
+  if ((a.action === 'raise' || a.action === 'bet' || a.action === 'allin') && !la.canRaise) {
+    return la.canCheck ? { ...a, action: 'check', title: 'Check' } : { ...a, action: 'call', title: la.callAmount >= s.players[heroIdx].stack ? 'Suivre à tapis' : 'Suivre' }
+  }
+  return a
+}
+
+function adviseRaw(s: GameState, heroIdx: number, rng: () => number = Math.random): Advice | null {
   if (s.acting !== heroIdx) return null
   const hero = s.players[heroIdx]
   const la = legalActions(s, heroIdx)

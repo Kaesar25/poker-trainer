@@ -18,6 +18,8 @@ export interface HandRecord {
   showdown: boolean
   winners: { name: string; amount: number; hand?: string }[]
   log: string[]
+  /** Snapshot of the table right after the deal, used to replay the hand. */
+  start?: GameState
 }
 
 export function buildRecord(before: GameState, after: GameState, heroId: number, mode: HandRecord['mode'], position: Position): HandRecord {
@@ -42,6 +44,7 @@ export function buildRecord(before: GameState, after: GameState, heroId: number,
     showdown,
     winners: (res?.winners ?? []).map((w) => ({ name: after.players.find((p) => p.id === w.playerId)!.name, amount: w.amount, hand: res?.descriptions[w.playerId] })),
     log: after.log.slice(startLogIdx),
+    start: { ...before, log: [], history: before.history.slice(), result: null },
   }
 }
 

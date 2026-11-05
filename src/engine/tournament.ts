@@ -20,13 +20,17 @@ export const STRUCTURES: Record<string, Structure> = {
     id: 'standard', name: 'Standard', levelSeconds: 360,
     levels: mk([[10, 20], [15, 30], [20, 40], [30, 60], [50, 100], [75, 150, 25], [100, 200, 25], [150, 300, 50], [200, 400, 50], [300, 600, 75], [400, 800, 100], [500, 1000, 100], [700, 1400, 200], [1000, 2000, 300], [1500, 3000, 500], [2000, 4000, 500]]),
   },
+  hyper: {
+    id: 'hyper', name: 'Hyper (express)', levelSeconds: 75,
+    levels: mk([[10, 20], [15, 30], [25, 50], [40, 80], [60, 120, 10], [100, 200, 25], [150, 300, 40], [250, 500, 60], [400, 800, 100], [600, 1200, 150], [1000, 2000, 250], [1500, 3000, 400], [2500, 5000, 600]]),
+  },
   live: {
     id: 'live', name: 'Live (type Malte)', levelSeconds: 600,
     levels: mk([[25, 50], [50, 100], [75, 150], [100, 200, 25], [150, 300, 50], [200, 400, 50], [300, 600, 100], [400, 800, 100], [500, 1000, 100], [600, 1200, 200], [800, 1600, 200], [1000, 2000, 300], [1500, 3000, 500], [2000, 4000, 500], [3000, 6000, 1000]]),
   },
 }
 
-export type TournamentMode = 'sng' | 'chipleader' | 'marathon'
+export type TournamentMode = 'sng' | 'chipleader' | 'marathon' | 'headsup' | 'express'
 
 export interface Tournament {
   mode: TournamentMode
@@ -72,7 +76,7 @@ export function createTournament(mode: TournamentMode, structureId: string, tabl
 
 /** Payout structure: fixed small-field tables, then ~15 % of the field paid with a geometric curve. */
 export function payoutTable(entrants: number, prizePool: number): number[] {
-  const pct = entrants <= 3 ? [0.65, 0.35] : entrants <= 6 ? [0.5, 0.3, 0.2] : entrants <= 12 ? [0.45, 0.27, 0.18, 0.1] : entrants <= 30 ? [0.4, 0.25, 0.15, 0.1, 0.06, 0.04] : null
+  const pct = entrants <= 2 ? [1] : entrants <= 3 ? [0.65, 0.35] : entrants <= 6 ? [0.5, 0.3, 0.2] : entrants <= 12 ? [0.45, 0.27, 0.18, 0.1] : entrants <= 30 ? [0.4, 0.25, 0.15, 0.1, 0.06, 0.04] : null
   if (pct) return pct.map((p) => Math.round(prizePool * p))
   const paid = Math.max(9, Math.round(entrants * 0.15))
   const w = Array.from({ length: paid }, (_, i) => 1 / Math.pow(i + 1, 1.05))

@@ -26,9 +26,11 @@ interface Props {
   position?: string
   compactSeat?: boolean
   strip?: boolean
+  note?: string
+  onClick?: () => void
 }
 
-export function Seat({ player: p, x, y, isHero, isDealer, isActing, handNumber, bb, winAmount, description, coverage, position, compactSeat, strip }: Props) {
+export function Seat({ player: p, x, y, isHero, isDealer, isActing, handNumber, bb, winAmount, description, coverage, position, compactSeat, strip, note, onClick }: Props) {
   const cls = ['seat', isHero ? 'hero' : '', compactSeat ? 'mini' : '', strip ? 'strip' : '', isActing ? 'acting' : '', p.folded ? 'folded' : '', p.out ? 'out' : '', winAmount ? 'winner' : '', coverage ? 'cv-' + coverage : '', p.allIn && !p.out ? 'is-allin' : ''].join(' ')
   const showCards = p.cards.length > 0 && !p.folded && !p.out
   const initials = p.name.slice(0, 2).toUpperCase()
@@ -41,7 +43,8 @@ export function Seat({ player: p, x, y, isHero, isDealer, isActing, handNumber, 
   if (compactSeat) {
     // Phone layout: avatar on top, stack under it, cards tucked on the avatar, coverage shown by ring colour.
     return (
-      <div className={cls} style={strip ? undefined : { left: `${x}%`, top: `${y}%` }}>
+      <div className={cls + (onClick ? ' tappable' : '')} style={strip ? undefined : { left: `${x}%`, top: `${y}%` }} onClick={onClick}>
+        {note && <span className="note-tag">{note}</span>}
         {isHero && cards(true)}
         <div className="mini-av">
           <div className="avatar" style={{ background: AVATAR_GRADIENTS[p.id % AVATAR_GRADIENTS.length] }}>{initials}</div>
@@ -58,7 +61,8 @@ export function Seat({ player: p, x, y, isHero, isDealer, isActing, handNumber, 
     )
   }
   return (
-    <div className={cls} style={{ left: `${x}%`, top: `${y}%` }}>
+    <div className={cls + (onClick ? ' tappable' : '')} style={{ left: `${x}%`, top: `${y}%` }} onClick={onClick}>
+      {note && <span className="note-tag">{note}</span>}
       {!isHero && cards(false)}
       <div className="plate">
         <div className="avatar" style={{ background: AVATAR_GRADIENTS[p.id % AVATAR_GRADIENTS.length] }}>{initials}</div>

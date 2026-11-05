@@ -1,10 +1,12 @@
 import { DRILL_META, type DrillType } from '../engine/drills'
 import { accuracy, endurance, levelFor, type Store } from '../store'
 import { LEVELS } from '../content/lessons'
+import { computeLeaks } from '../engine/leaks'
 
 const TYPES: DrillType[] = ['preflop', 'odds', 'outs', 'board', 'pushfold', 'icm']
 
-export function Training({ store, onDaily, onDrill, onLearn, onBack, onMarathon, onPuzzle }: { store: Store; onDaily: () => void; onDrill: (t: DrillType) => void; onLearn: () => void; onBack: () => void; onMarathon: () => void; onPuzzle: () => void }) {
+export function Training({ store, onDaily, onDrill, onLearn, onBack, onMarathon, onPuzzle, onPro, onLeaks, onIcm, onChallenges }: { store: Store; onDaily: () => void; onDrill: (t: DrillType) => void; onLearn: () => void; onBack: () => void; onMarathon: () => void; onPuzzle: () => void; onPro: () => void; onLeaks: () => void; onIcm: () => void; onChallenges: () => void }) {
+  const leaks = computeLeaks(store)
   const lv = levelFor(store.xp)
   const en = endurance(store)
   const doneToday = store.streak.lastDay === new Date().toISOString().slice(0, 10)
@@ -36,6 +38,12 @@ export function Training({ store, onDaily, onDrill, onLearn, onBack, onMarathon,
         </div>
         <div className="daily-r">♟</div>
       </button>
+      <div className="toolgrid">
+        <button className="tool" onClick={onLeaks}><span className="tool-i">⚠</span><b>Carnet de leaks</b><small>{leaks.length ? `${Math.min(3, leaks.length)} point${leaks.length > 1 ? 's' : ''} à travailler` : 'Tes défauts, ton plan'}</small></button>
+        <button className="tool" onClick={onPro}><span className="tool-i">★</span><b>Spots de pros</b><small>Grands classiques</small></button>
+        <button className="tool" onClick={onIcm}><span className="tool-i">⚖</span><b>Simulateur ICM</b><small>Ce que vaut ton tapis</small></button>
+        <button className="tool" onClick={onChallenges}><span className="tool-i">🏅</span><b>Défis et badges</b><small>Semaine en cours</small></button>
+      </div>
       <div className="drillgrid">
         {TYPES.map((t) => {
           const m = DRILL_META[t]

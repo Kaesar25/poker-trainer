@@ -1,8 +1,8 @@
-import { newDeck, shuffle, type Card, cardToString } from './cards'
+import { newDeck, shuffle, parseCard, type Card, cardToString } from './cards'
 import { evaluate, CATEGORY_LABEL, type HandCategory } from './evaluator'
 import { handLabel, openDecision, vsRaiseDecision, pushDecision, callShoveDecision, POSITIONS, type Pos } from './ranges'
 
-export type DrillType = 'preflop' | 'odds' | 'outs' | 'board' | 'pushfold' | 'icm'
+export type DrillType = 'preflop' | 'odds' | 'outs' | 'board' | 'pushfold' | 'icm' | 'pro'
 
 export const DRILL_META: Record<DrillType, { name: string; icon: string; desc: string; timed?: number }> = {
   preflop: { name: 'Ranges préflop', icon: '♠', desc: 'Ouvrir, suivre ou relancer selon ta position et ta main.' },
@@ -11,6 +11,7 @@ export const DRILL_META: Record<DrillType, { name: string; icon: string; desc: s
   board: { name: 'Lecture du board', icon: '♣', desc: 'Quelle est la meilleure main possible sur ce tableau ?' },
   pushfold: { name: 'Push / fold', icon: '⇧', desc: 'Short stack en tournoi : tapis ou couché ?' },
   icm: { name: 'Prime de risque', icon: '♛', desc: 'Spots de fin de tournoi, gros stack contre gros stack.' },
+  pro: { name: 'Spots de pros', icon: '★', desc: 'Grands classiques et coups célèbres : trouve la décision avant de voir ce qui s\'est passé.' },
 }
 
 export interface Question {
@@ -283,6 +284,100 @@ export function genIcm(): Question {
   return { type: 'icm', ...q }
 }
 
+const C = (x: string) => x.split(' ').map(parseCard)
+
+const PRO_SPOTS: Omit<Question, 'type'>[] = [
+  {
+    prompt: 'Inspiré du WSOP 2003, tête-à-tête final. Tu as raté tes tirages : à la river, ton adversaire checke. Il a souvent une paire moyenne qu\'il ne peut pas miser. Tu as plus de jetons que lui.',
+    cards: C('Ks 7h'), board: C('9s 2d 6s 8s 3h'),
+    facts: [{ l: 'Ta main', v: 'Hauteur roi' }, { l: 'Lui', v: 'Checke la river' }],
+    options: [{ id: 'check', label: 'Check' }, { id: 'small', label: 'Petite mise' }, { id: 'jam', label: 'Tapis' }],
+    correct: 'jam',
+    explanation: 'Check, tu perds contre n\'importe quelle paire. Une petite mise se fait payer par une paire. Le tapis raconte une couleur ou une quinte, deux tirages arrivés sur ce board, et met tout son tournoi en jeu. C\'est le bluff célèbre de Chris Moneymaker contre Sam Farha : Farha s\'est couché avec une paire de 9.',
+  },
+  {
+    prompt: 'Inspiré du Main Event 1988. Tu touches la quinte max au flop face à un adversaire agressif qui a probablement touché une paire. Tu parles en premier.',
+    cards: C('Jc 9c'), board: C('Qc 8d Th'),
+    facts: [{ l: 'Ta main', v: 'Quinte max' }, { l: 'Lui', v: 'Agressif, top paire probable' }],
+    options: [{ id: 'check', label: 'Check (le laisser miser)' }, { id: 'bet', label: 'Miser ½ pot' }, { id: 'jam', label: 'Tapis' }],
+    correct: 'check',
+    explanation: 'Contre un joueur qui va miser sa top paire, le check rapporte plus : tu le laisses construire le pot, puis tu relances ou tu suis pour l\'emmener à la turn. Johnny Chan a joué ce coup lentement contre Erik Seidel, qui a fini par mettre tous ses jetons avec sa paire de dames.',
+  },
+  {
+    prompt: 'Classique : flop sec et as en tête. Un joueur très serré (nit) qui avait suivi préflop mise gros au flop dans ton dos, après ton c-bet.',
+    cards: C('Kd Kc'), board: C('Ah 7c 2s'),
+    facts: [{ l: 'Adversaire', v: 'Nit' }, { l: 'Action', v: 'Relance ×3 ton c-bet' }],
+    options: [{ id: 'fold', label: 'Fold' }, { id: 'call', label: 'Call' }, { id: 'jam', label: 'Tapis' }],
+    correct: 'fold',
+    explanation: 'Un nit ne relance pas un flop A-7-2 sans as ou mieux. Ta paire de rois ne bat que des bluffs qu\'il ne fait presque jamais. Couche : c\'est exactement le genre de main qu\'on perd par fierté.',
+  },
+  {
+    prompt: 'Classique de bulle : 7 joueurs, 6 payés. Tu as 55 BB, les deux joueurs à ta gauche ont 14 et 11 BB. Tout le monde se couche jusqu\'à toi au cutoff.',
+    cards: C('Qh 6h'), board: [],
+    facts: [{ l: 'Toi', v: '55 BB, cutoff' }, { l: 'Derrière', v: '14 et 11 BB' }],
+    options: [{ id: 'fold', label: 'Fold' }, { id: 'raise', label: 'Relancer à 2 BB' }],
+    correct: 'raise',
+    explanation: 'À la bulle, les stacks moyens ne peuvent pas défendre sans risquer la place payée. Tu ouvres très large : chaque vol de blinds est quasiment gratuit. C\'est le cœur du jeu de gros stack.',
+  },
+  {
+    prompt: 'Classique : un maniaque mise trois rues. River, il mise le pot. Tu as une deuxième paire.',
+    cards: C('9h 8h'), board: C('Kd 9c 4s 2h 6d'),
+    facts: [{ l: 'Adversaire', v: 'Maniac' }, { l: 'Mise river', v: 'Pot' }],
+    options: [{ id: 'fold', label: 'Fold' }, { id: 'call', label: 'Call' }, { id: 'raise', label: 'Relance' }],
+    correct: 'call',
+    explanation: 'Contre un maniaque, son range de mise river contient énormément de bluffs. Il te faut 33 % d\'équité, ta deuxième paire bat largement ce seuil. Relancer ne fait coucher que ses bluffs : paie.',
+  },
+  {
+    prompt: 'Classique : tu as touché brelan. À la river, quatre cartes de la même couleur sont au board. Un joueur serré fait tapis.',
+    cards: C('7d 7c'), board: C('7s Js 2s 9h 4s'),
+    facts: [{ l: 'Adversaire', v: 'Serré' }, { l: 'Action', v: 'Tapis river' }],
+    options: [{ id: 'fold', label: 'Fold' }, { id: 'call', label: 'Call' }],
+    correct: 'fold',
+    explanation: 'Avec quatre piques au board, n\'importe quel pique bat ton brelan. Un joueur serré ne fait pas tapis ici sans couleur. Couche ta grosse main : savoir lâcher un brelan est une compétence de pro.',
+  },
+  {
+    prompt: 'Classique de fin de tournoi : il te reste 3 BB en small blind. Tout le monde se couche, seule la grosse blind reste.',
+    cards: C('8c 3d'), board: [],
+    facts: [{ l: 'Toi', v: '3 BB, SB' }, { l: 'BB', v: 'Te couvre' }],
+    options: [{ id: 'fold', label: 'Fold' }, { id: 'jam', label: 'Tapis' }],
+    correct: 'jam',
+    explanation: 'À 3 BB, tu dois pousser toutes tes mains ici : la BB doit souvent coucher, et même payé, 8-3 a environ 30 % d\'équité. Attendre te fait perdre ta dernière fold equity.',
+  },
+  {
+    prompt: 'Classique : en position, tu as payé une relance. Le relanceur fait un petit c-bet au flop.',
+    cards: C('Ad Qd'), board: C('9s 6d 2c'),
+    facts: [{ l: 'Position', v: 'Tu parles en dernier' }, { l: 'C-bet', v: '⅓ pot' }],
+    options: [{ id: 'fold', label: 'Fold' }, { id: 'call', label: 'Call (float)' }, { id: 'raise', label: 'Relancer' }],
+    correct: 'call',
+    explanation: 'Deux overcards, un backdoor couleur et la position contre une petite mise : tu as assez d\'équité et de jouabilité pour suivre. Coucher est trop faible, relancer gonfle le pot avec une main qui gagne surtout en touchant.',
+  },
+  {
+    prompt: 'Classique : contre une calling station, tu as une paire moyenne à la river et elle checke.',
+    cards: C('Th 9d'), board: C('Kc Ts 5h 3d 2c'),
+    facts: [{ l: 'Adversaire', v: 'Calling station' }, { l: 'Action', v: 'Checke la river' }],
+    options: [{ id: 'check', label: 'Check' }, { id: 'small', label: 'Petite mise (⅓ pot)' }, { id: 'big', label: 'Grosse mise' }],
+    correct: 'small',
+    explanation: 'Une calling station paie avec n\'importe quelle paire inférieure et même hauteur as. Une petite mise pour valeur est rentable. Une grosse mise ne se fait payer que par mieux.',
+  },
+  {
+    prompt: 'Classique : un joueur ouvre au cutoff, un autre suit au bouton. Tu es en small blind avec un as assorti faible.',
+    cards: C('As 5s'), board: [],
+    facts: [{ l: 'Action', v: 'Open CO + call BTN' }, { l: 'Toi', v: 'SB, 100 BB' }],
+    options: [{ id: 'fold', label: 'Fold' }, { id: 'call', label: 'Call' }, { id: 'squeeze', label: '3-bet (squeeze)' }],
+    correct: 'squeeze',
+    explanation: 'Le squeeze est rentable : le relanceur doit se méfier du joueur derrière, et celui qui a seulement suivi a rarement une grosse main. A5s bloque les as et reste jouable si tu es payé. Payer hors de position à trois est la pire option.',
+  },
+]
+
+export function genPro(): Question {
+  const q = pick(PRO_SPOTS)
+  return { type: 'pro', ...q, board: q.board && q.board.length ? q.board : undefined }
+}
+
+export function proSession(): Question[] {
+  return shuffle(PRO_SPOTS).map((q) => ({ type: 'pro' as const, ...q, board: q.board && q.board.length ? q.board : undefined }))
+}
+
 export function generate(type: DrillType): Question {
   switch (type) {
     case 'preflop': return genPreflop()
@@ -291,6 +386,7 @@ export function generate(type: DrillType): Question {
     case 'board': return genBoard()
     case 'pushfold': return genPushFold()
     case 'icm': return genIcm()
+    case 'pro': return genPro()
   }
 }
 

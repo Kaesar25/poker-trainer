@@ -30,7 +30,7 @@ export function Hud({ state: s, tournament: t, mode, heroIdx, showLog, onToggleL
   const next = st ? st.levels[Math.min(li + 1, st.levels.length - 1)] : null
   const left = t ? levelTimeLeft(t) : 0
   const progress = t && st ? 1 - left / (st.levelSeconds * 1000) : 0
-  const title = mode === 'cash' ? 'Cash game' : mode === 'sng' ? 'Sit & Go' : mode === 'marathon' ? 'Marathon' : 'Chip leader'
+  const title = ({ cash: 'Cash game', sng: 'Sit & Go', marathon: 'Marathon', chipleader: 'Chip leader', headsup: 'Heads-up', express: 'Express' } as Record<string, string>)[mode] ?? mode
   const field = t ? (t.mode === 'marathon' ? `${t.field}/${t.entrants}` : `${alive.length}/${t.entrants}`) : null
   const place = t ? (t.mode === 'marathon' ? `≈${estimateRank(t, s, hero.stack)}e` : `${rank}${rank === 1 ? 'er' : 'e'}`) : null
 
